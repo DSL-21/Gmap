@@ -25,21 +25,21 @@ Open in Android Studio
 
 Build & run on a physical device or emulator
 
-📱 Requirements
+## 📱 Requirements
 Android 9 (API 28) or higher
 
 Internet access
 
 File write permissions (for Android <10)
 
-🔐 Permissions
+## 🔐 Permissions
 INTERNET – to scan network targets
 
 WRITE_EXTERNAL_STORAGE – for saving scan reports (Android < Q)
 
 Scoped Storage is used on Android 10+
 
-⚠️ Disclaimer
+## ⚠️ Disclaimer
 This app is intended only for educational and ethical purposes.
 Use it only on networks and systems you own or have explicit permission to test.
 The author is not responsible for misuse or illegal activity.
