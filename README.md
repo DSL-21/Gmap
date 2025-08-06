@@ -20,7 +20,7 @@ A lightweight Android app for scanning network hosts, detecting open ports, iden
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/android-network-scanner.git
+   git clone https://github.com/DSL-21/Gmap.git
 Open in Android Studio
 
 Build & run on a physical device or emulator
