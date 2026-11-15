@@ -13,7 +13,6 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NoRouteToHostException
 import java.net.SocketAddress
-import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
@@ -55,15 +54,15 @@ class TcpConnectScanner {
         var filteredCount = 0
         var errorCount = 0
 
-        // Start with a device-aware window. There is no fixed 48/128 worker cap:
-        // the window may grow up to the requested port count, subject to OS limits.
+        // There is no fixed 48/128 worker cap. The window can grow to the
+        // requested scan size and backs off only when the OS reports pressure.
         var window = minOf(
             total,
             maxOf(256, Runtime.getRuntime().availableProcessors() * 128)
         )
         var resourceBackoffUntil = 0L
         var completedSinceGrowth = 0
-        var resourcePressure = false
+        var resourceCooldown = 0
 
         fun record(result: PortScanResult) {
             results.add(result)
@@ -90,14 +89,14 @@ class TcpConnectScanner {
                 )
             }
 
+            if (resourceCooldown > 0) resourceCooldown--
             completedSinceGrowth++
             if (completedSinceGrowth >= 128) {
-                if (!resourcePressure && window < total) {
+                if (resourceCooldown == 0 && window < total) {
                     val increase = maxOf(64, window / 2)
                     window = minOf(total, window + increase)
                 }
                 completedSinceGrowth = 0
-                resourcePressure = false
             }
         }
 
@@ -163,10 +162,10 @@ class TcpConnectScanner {
                         val startedAt = System.nanoTime()
                         val remote: SocketAddress = InetSocketAddress(address, port)
                         val connectedImmediately = channel.connect(remote)
-                        nextPort++
 
                         if (connectedImmediately) {
                             channel.close()
+                            nextPort++
                             record(
                                 PortScanResult(
                                     port = port,
@@ -182,9 +181,12 @@ class TcpConnectScanner {
                                 startedAtNanos = startedAt,
                                 deadlineNanos = startedAt + TimeUnit.MILLISECONDS.toNanos(timeoutMs.toLong())
                             )
+                            // Advance only after registration succeeds. If registration
+                            // hits local descriptor pressure, retry this same port.
                             channel.register(selector, SelectionKey.OP_CONNECT, probe)
                             deadlines.add(probe)
                             inFlight++
+                            nextPort++
                         }
                     } catch (exception: IOException) {
                         try {
@@ -196,7 +198,7 @@ class TcpConnectScanner {
                         if (isLocalResourceExhaustion(exception)) {
                             // Do not advance nextPort: retry the same port after backing off.
                             window = maxOf(8, window / 2)
-                            resourcePressure = true
+                            resourceCooldown = maxOf(resourceCooldown, window)
                             resourceBackoffUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(250)
                             break
                         }
@@ -292,12 +294,11 @@ class TcpConnectScanner {
 
             results.sortedBy { it.port }
         } finally {
-            // Closing the selector also invalidates registered keys. Explicitly close
-            // channels as well so cancellation never leaves sockets behind.
+            // Closing all pending channels ensures cancellation does not leave sockets behind.
             try {
                 selector.keys().toList().forEach { key ->
                     try {
-                        key.channel()?.close()
+                        key.channel().close()
                     } catch (_: IOException) {
                         // Best-effort cleanup.
                     }
