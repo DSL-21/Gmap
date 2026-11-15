@@ -46,8 +46,7 @@ class ScanViewModel(
     fun startScan(
         targetInput: String,
         startPortInput: String,
-        endPortInput: String,
-        authorizationConfirmed: Boolean
+        endPortInput: String
     ) {
         if (scanJob?.isActive == true) return
 
@@ -56,11 +55,6 @@ class ScanViewModel(
             setError("Enter one hostname or IP address. CIDR ranges and URLs are not supported in this build.")
             return
         }
-        if (!authorizationConfirmed) {
-            setError("Confirm that you own this target or have permission to assess it.")
-            return
-        }
-
         val portRange = PortRangeParser.parse(startPortInput, endPortInput)
         if (portRange == null) {
             setError("Enter a valid port range between 1 and 65535.")

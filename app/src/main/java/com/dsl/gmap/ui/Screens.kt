@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -133,12 +132,6 @@ fun DashboardScreen(
         FeatureRow(Icons.Default.Radar, "TCP port scanning", "Non-blocking TCP Connect scanning with adaptive socket scheduling.")
         FeatureRow(Icons.Default.CheckCircle, "Service identification", "Read-only protocol greetings, HTTP headers, and TLS certificate details where supported.")
         FeatureRow(Icons.Default.Info, "Live scan metrics", "Progress, response timing, throughput, and explicit result states.")
-
-        Text(
-            "Only scan systems and networks you own or are explicitly authorized to assess.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall
-        )
     }
 }
 
@@ -146,11 +139,10 @@ fun DashboardScreen(
 fun ScanScreen(viewModel: ScanViewModel) {
     val state by viewModel.uiState.collectAsState()
     val timeoutMs by viewModel.timeoutMs.collectAsState()
-    // Target, port input and authorization confirmation are ephemeral by design.
+    // Scan inputs are ephemeral and are not persisted.
     var target by remember { mutableStateOf("") }
     var startPort by remember { mutableStateOf("1") }
     var endPort by remember { mutableStateOf("1024") }
-    var authorizationConfirmed by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -167,10 +159,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
 
         OutlinedTextField(
             value = target,
-            onValueChange = {
-                target = it
-                authorizationConfirmed = false
-            },
+            onValueChange = { target = it },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Target hostname or IP address") },
             placeholder = { Text("192.168.1.1 or example.com") },
@@ -226,15 +215,6 @@ fun ScanScreen(viewModel: ScanViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(
-                checked = authorizationConfirmed,
-                onCheckedChange = { authorizationConfirmed = it },
-                enabled = !state.isScanning
-            )
-            Text("I own this target or have permission to scan it.", style = MaterialTheme.typography.bodySmall)
-        }
-
         if (state.isScanning) {
             OutlinedButton(
                 onClick = viewModel::stopScan,
@@ -247,9 +227,8 @@ fun ScanScreen(viewModel: ScanViewModel) {
             }
         } else {
             Button(
-                onClick = { viewModel.startScan(target, startPort, endPort, authorizationConfirmed) },
+                onClick = { viewModel.startScan(target, startPort, endPort) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                enabled = authorizationConfirmed,
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null)

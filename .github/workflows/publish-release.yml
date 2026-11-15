@@ -1,4 +1,4 @@
-name: Publish Gmap 2.0 Release
+name: Publish Gmap 2.0.1 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-0
+  group: publish-gmap-2-0-1
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.0
-    if: startsWith(github.event.head_commit.message, 'Publish Gmap 2.0 release workflow')
+    name: Build, test and publish Gmap 2.0.1
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.0.1')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,23 +50,23 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.0.1.apk
           cd release-assets
-          sha256sum gmap-2.0.0.apk > gmap-2.0.0.apk.sha256
+          sha256sum gmap-2.0.1.apk > gmap-2.0.1.apk.sha256
 
       - name: Create GitHub Release and upload APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v2.0 \
-            release-assets/gmap-2.0.0.apk \
-            release-assets/gmap-2.0.0.apk.sha256 \
+          gh release create v2.0.1 \
+            release-assets/gmap-2.0.1.apk \
+            release-assets/gmap-2.0.1.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.0" \
-            --notes "## Gmap 2.0
+            --title "Gmap 2.0.1" \
+            --notes "## Gmap 2.0.1
 
-          First modernized release of Gmap: a rootless Android network scanner built with Kotlin, Jetpack Compose and Java NIO.
+          Gmap 2.0.1 removes the mandatory pre-scan confirmation and all in-app responsible-use notices.
 
           ### Highlights
           - Non-blocking TCP Connect port scanning for a single hostname, IPv4 or IPv6 target.
@@ -76,14 +76,13 @@ jobs:
           - Read-only service identification for selected SSH, FTP, SMTP, POP3, IMAP, VNC, MySQL, HTTP, TLS, Redis and PostgreSQL services.
           - HTTP response metadata and TLS session/certificate details where supported.
           - In-memory scan history only; no scan-result database, automatic report files, analytics or cloud sync.
-          - English Jetpack Compose interface and authorization confirmation before scanning.
+          - English Jetpack Compose interface.
 
           ### Download and installation
-          Download **gmap-2.0.0.apk** and install it on an Android device running Android 8.0 (API 26) or later. You may need to allow installation from your browser or file manager.
+          Download **gmap-2.0.1.apk** and install it on an Android device running Android 8.0 (API 26) or later.
 
           ### Build status and signing
-          This is a CI-generated **debug-signed test APK**. It is suitable for direct testing but is not signed with a dedicated production/release keystore and is not a Google Play production package. The SHA-256 checksum is included as a separate asset.
+          This is a CI-generated debug-signed APK for direct installation and testing. It is not signed with a dedicated production keystore or packaged for Google Play. A SHA-256 checksum is included.
 
           ### Current scope and limitations
-          Gmap 2.0 currently provides single-host TCP Connect scanning and best-effort identification for selected protocols. It does not implement raw TCP SYN, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode or packet injection. Subnet discovery, UDP scanning, broader security assessment and device-level performance benchmarking remain future work. The app targets Android SDK 36; a runtime ACCESS_LOCAL_NETWORK permission flow is required before raising the target to API 37."
-
+          Gmap 2.0.1 currently provides single-host TCP Connect scanning and best-effort identification for selected protocols. It does not implement raw TCP SYN, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode or packet injection. Subnet discovery, UDP scanning, broader security assessment and device-level performance benchmarking remain future work. The app targets Android SDK 36."

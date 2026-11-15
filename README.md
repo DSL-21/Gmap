@@ -23,7 +23,6 @@ The `main` branch currently includes:
 - Adaptive outstanding-probe scheduling that grows to the requested scan size and backs off on OS-level resource exhaustion.
 - Separate `OPEN`, `CLOSED`, `FILTERED`, and `ERROR` outcomes.
 - Scan progress, throughput metrics, and cancellation.
-- A required confirmation that the user owns the target or is authorized to assess it.
 - Bounded, read-only service identification on selected open ports: SSH/FTP/SMTP/POP3/IMAP/VNC greetings, MySQL handshake banner, HTTP response headers, Redis PING, PostgreSQL TLS negotiation, and TLS certificate/session details.
 - In-memory session history with open-port findings and timing statistics.
 
@@ -60,6 +59,3 @@ The supported port-discovery method is TCP Connect scanning. Read-only applicati
 
 Scan targets, port results, host details, and scan history are held in RAM for the active application session only. They are discarded when the process/session ends. There is no automatic file export, JSON/CSV report generation, local database, or cloud sync. A future export feature, if ever added, must be an explicit user-initiated action and must not run automatically.
 
-## Responsible use
-
-Use Gmap only on systems and networks that you own or have explicit permission to assess. Scanning may trigger monitoring, alerts, or service rate limits. Start with a scan profile appropriate to the target and network, and avoid overwhelming devices or network infrastructure.
