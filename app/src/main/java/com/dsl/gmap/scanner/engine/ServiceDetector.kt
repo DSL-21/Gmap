@@ -9,7 +9,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.InetAddress
@@ -18,7 +17,6 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicInteger
-import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 
@@ -183,7 +181,7 @@ class ServiceDetector(
                 val certificate = ssl.session.peerCertificates.firstOrNull() as? X509Certificate
                 val hostHeader = originalTarget.takeIf { it.isNotBlank() } ?: address.hostAddress.orEmpty()
                 val httpHeaders = try {
-                    val request = "HEAD / HTTP/1.0\\r\\nHost: $hostHeader\\r\\nUser-Agent: Gmap-Scanner\\r\\nConnection: close\\r\\n\\r\\n"
+                    val request = "HEAD / HTTP/1.0\r\nHost: $hostHeader\r\nUser-Agent: Gmap-Scanner\r\nConnection: close\r\n\r\n"
                     ssl.getOutputStream().write(request.toByteArray(StandardCharsets.US_ASCII))
                     ssl.getOutputStream().flush()
                     readHttpHeaders(ssl)
