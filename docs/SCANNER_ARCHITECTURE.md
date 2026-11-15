@@ -32,6 +32,21 @@ Port-state classification:
 
 This is a TCP Connect scanner. It is not a raw-packet SYN scanner. It is still a prototype and must be benchmarked on actual Android devices and networks before performance claims are made.
 
+## Service identification
+
+After the TCP scan completes, the app runs a separate bounded identification pass on confirmed open ports. The service detector uses a small fixed worker pool and read-only protocol exchanges:
+
+- SSH, FTP, SMTP, POP3, IMAP, and VNC: read the initial service greeting.
+- HTTP: send a HEAD request and collect a bounded set of response headers.
+- TLS: complete a normal platform-validated handshake and show negotiated protocol/cipher and peer certificate subject, issuer, and expiry when available.
+- MySQL: parse the initial handshake greeting.
+- Redis: send the unauthenticated PING command.
+- PostgreSQL: send the standard SSL negotiation request and classify the single-byte response.
+
+Probes are bounded by socket timeouts and response-size limits. They do not try passwords, authenticate, change server state, or exploit vulnerabilities. A probe failure never changes the underlying TCP result from OPEN to CLOSED. Unsupported ports remain unidentified. TLS details may be unavailable for self-signed, expired, hostname-mismatched, or otherwise untrusted certificates because the current implementation uses the platform trust configuration.
+
+The scan form provides Quick (1–256), Well-known (1–1024), Extended (1–10000), and Full TCP (1–65535) range presets. These are convenience ranges, not a claim that each profile corresponds to a curated Nmap top-ports list.
+
 ## Benchmark method
 
 1. Use the same Android phone, Wi-Fi/mobile network, target host, port set, and test window.
