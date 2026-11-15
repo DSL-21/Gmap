@@ -33,7 +33,13 @@ jobs:
           packages: platform-tools
 
       - name: Install Android 17 SDK platform
-        run: sdkmanager "platforms;android-37"
+        run: sdkmanager "platforms;android-37.0"
+
+      - name: Add API 37 SDK compatibility alias
+        run: |
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
