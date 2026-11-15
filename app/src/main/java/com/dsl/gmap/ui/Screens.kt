@@ -105,7 +105,7 @@ fun DashboardScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard(Modifier.weight(1f), "TCP", "SCAN METHOD")
-            MetricCard(Modifier.weight(1f), "RAM", "LIVE RESULTS")
+            MetricCard(Modifier.weight(1f), "RAM", "SESSION DATA")
             MetricCard(Modifier.weight(1f), "0", "ROOT REQUIRED")
         }
 
@@ -259,7 +259,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
                     }
                     state.elapsedMs?.let {
                         Text(
-                            "Elapsed: ${it / 1000.0}s",
+                            "Elapsed: ${it / 1000.0}s  •  Rate: ${state.probesPerSecond.toLong()} probes/s",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -289,13 +289,6 @@ fun ScanScreen(viewModel: ScanViewModel) {
                 )
             } else {
                 state.openPorts.forEach { PortResultRow(it) }
-                if (state.openCount > state.openPorts.size) {
-                    Text(
-                        "Showing the first ${state.openPorts.size} open ports.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
             }
         }
     }
@@ -305,7 +298,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
 fun HistoryScreen() {
     EmptyFeatureScreen(
         heading = "Scan history",
-        description = "Saved scan sessions and exportable reports will be introduced in a later milestone."
+        description = "In-memory session history will be available while Gmap is open. Sessions are cleared when the app process ends; nothing is written to local files or a database."
     )
 }
 
@@ -313,7 +306,7 @@ fun HistoryScreen() {
 fun SettingsScreen() {
     EmptyFeatureScreen(
         heading = "Settings",
-        description = "Scanner profiles, timeouts, concurrency, and display preferences will be configurable here."
+        description = "Scanner profiles and tuning preferences will be configurable here. Scan targets and results remain in RAM only; Gmap does not create JSON, CSV, text reports, or a local scan database."
     )
 }
 

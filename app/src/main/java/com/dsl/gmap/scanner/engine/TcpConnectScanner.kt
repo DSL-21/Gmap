@@ -46,6 +46,7 @@ class TcpConnectScanner {
         val deadlines = PriorityQueue<PendingProbe>(compareBy { it.deadlineNanos })
         val total = endPort - startPort + 1
 
+        val scanStartedNanos = System.nanoTime()
         var nextPort = startPort
         var inFlight = 0
         var completed = 0
@@ -83,7 +84,11 @@ class TcpConnectScanner {
                         openCount = openCount,
                         closedCount = closedCount,
                         filteredCount = filteredCount,
-                        errorCount = errorCount
+                        errorCount = errorCount,
+                        elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - scanStartedNanos),
+                        probesPerSecond = if (System.nanoTime() > scanStartedNanos) {
+                            completed * 1_000_000_000.0 / (System.nanoTime() - scanStartedNanos)
+                        } else 0.0
                     ),
                     result
                 )

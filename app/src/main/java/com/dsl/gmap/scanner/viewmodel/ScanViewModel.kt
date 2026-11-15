@@ -78,7 +78,7 @@ class ScanViewModel(
                             (current.openPorts + latestResult)
                                 .distinctBy { result -> result.port }
                                 .sortedBy { result -> result.port }
-                                .take(100)
+                                
                         } else {
                             current.openPorts
                         }
@@ -92,6 +92,8 @@ class ScanViewModel(
                             filteredCount = progress.filteredCount,
                             errorCount = progress.errorCount,
                             openPorts = updatedOpenPorts,
+                            elapsedMs = progress.elapsedMs,
+                            probesPerSecond = progress.probesPerSecond,
                             statusMessage = "Scanning ${address.hostAddress}"
                         )
                     }
@@ -108,8 +110,9 @@ class ScanViewModel(
                         closedCount = results.count { it.state == PortState.CLOSED },
                         filteredCount = results.count { it.state == PortState.FILTERED },
                         errorCount = results.count { it.state == PortState.ERROR },
-                        openPorts = results.filter { it.state == PortState.OPEN }.take(100),
+                        openPorts = results.filter { it.state == PortState.OPEN },
                         elapsedMs = elapsed,
+                        probesPerSecond = if (elapsed > 0) results.size * 1000.0 / elapsed else 0.0,
                         statusMessage = "Scan completed"
                     )
                 }

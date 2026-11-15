@@ -16,7 +16,9 @@ data class ScanProgress(
     val openCount: Int,
     val closedCount: Int,
     val filteredCount: Int,
-    val errorCount: Int
+    val errorCount: Int,
+    val elapsedMs: Long = 0,
+    val probesPerSecond: Double = 0.0
 ) {
     val fraction: Float
         get() = if (total <= 0) 0f else completed.toFloat() / total.toFloat()
@@ -36,5 +38,6 @@ data class ScanUiState(
     val filteredCount: Int = 0,
     val errorCount: Int = 0,
     val openPorts: List<PortScanResult> = emptyList(),
-    val elapsedMs: Long? = null
+    val elapsedMs: Long? = null,
+    val probesPerSecond: Double = 0.0
 )
