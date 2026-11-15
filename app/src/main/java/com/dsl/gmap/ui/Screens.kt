@@ -105,7 +105,7 @@ fun DashboardScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             MetricCard(Modifier.weight(1f), "TCP", "SCAN METHOD")
-            MetricCard(Modifier.weight(1f), "48", "MAX WORKERS")
+            MetricCard(Modifier.weight(1f), "RAM", "LIVE RESULTS")
             MetricCard(Modifier.weight(1f), "0", "ROOT REQUIRED")
         }
 
