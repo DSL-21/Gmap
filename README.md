@@ -19,15 +19,17 @@ The `feature/rootless-scanner-v2` branch introduces:
 - A dark, English-language Jetpack Compose interface.
 - A dedicated non-blocking TCP Connect scanning engine using Java NIO `SocketChannel` and `Selector`.
 - Single-host scanning by hostname, IPv4 address, or IPv6 address.
-- User-defined TCP port ranges from 1 to 65535.
+- User-defined TCP port ranges from 1 to 65535, with Quick, Well-known, Extended, and Full TCP presets.
 - Adaptive outstanding-probe scheduling that grows to the requested scan size and backs off on OS-level resource exhaustion.
 - Separate `OPEN`, `CLOSED`, `FILTERED`, and `ERROR` outcomes.
 - Scan progress, throughput metrics, and cancellation.
 - A required confirmation that the user owns the target or is authorized to assess it.
+- Bounded, read-only service identification on selected open ports: SSH/FTP/SMTP/POP3/IMAP greetings, MySQL handshake banner, HTTP response headers, Redis PING, PostgreSQL TLS negotiation, and TLS certificate/session details.
+- In-memory session history with open-port findings and timing statistics.
 
-The service labels shown in this milestone are hints based on conventional port numbers. They are not the result of protocol-level service or version detection.
+Service identification is best-effort and protocol-aware only for the implemented probes. It does not attempt authentication, exploit services, or assert vulnerability based solely on a banner. TLS certificate details are available only when the peer completes a handshake accepted by the platform trust configuration.
 
-This is an early engine prototype, not a verified speed leader. It needs build verification and controlled benchmarks on real Android devices before performance claims can be made.
+This remains a development build, not a verified speed leader. It needs successful CI and controlled benchmarks on real Android devices before performance claims can be made.
 
 ## Why not one coroutine per port?
 
@@ -52,7 +54,7 @@ The app deliberately remains at target SDK 36 for now. Android 17 (API 37) gates
 
 A normal Android application cannot assume access to privileged raw-packet capabilities. Therefore, this project does not claim to implement raw TCP SYN scanning, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode, or packet injection.
 
-The current supported method is TCP Connect scanning. Further rootless modules can include UDP application-level probes, DNS, TLS certificate inspection, protocol-aware service detection, HTTP security checks, and system-mediated local-service discovery where appropriate.
+The supported port-discovery method is TCP Connect scanning. Read-only application-layer identification is performed only against ports that TCP scanning confirmed OPEN. UDP application-level probes, subnet discovery, and broader security assessment are planned modules, not current capabilities.
 
 ## Privacy and storage
 
