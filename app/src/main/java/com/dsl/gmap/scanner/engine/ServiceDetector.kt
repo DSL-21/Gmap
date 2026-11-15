@@ -2,6 +2,7 @@ package com.dsl.gmap.scanner.engine
 
 import com.dsl.gmap.scanner.model.PortScanResult
 import com.dsl.gmap.scanner.model.ServiceFingerprint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -84,6 +85,8 @@ class ServiceDetector(
                 6379 -> identifyRedis(address, result, timeoutMs)
                 else -> result
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (exception: Exception) {
             // The TCP port remains OPEN even when an application-layer probe
             // is unsupported, silent, or rejects the identification request.
@@ -235,7 +238,7 @@ class ServiceDetector(
         val response = Socket().use { socket ->
             connect(socket, address, result.port, timeoutMs)
             socket.soTimeout = timeoutMs.coerceIn(300, MAX_TIMEOUT_MS)
-            socket.getOutputStream().write("*1\r\n$4\r\nPING\r\n".toByteArray(StandardCharsets.US_ASCII))
+            socket.getOutputStream().write(("*1\r\n" + "$" + "4\r\nPING\r\n").toByteArray(StandardCharsets.US_ASCII))
             socket.getOutputStream().flush()
             readLine(socket, MAX_BANNER_BYTES)
         }?.let(::sanitize)
