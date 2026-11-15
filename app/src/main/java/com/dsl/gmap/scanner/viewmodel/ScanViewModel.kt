@@ -3,6 +3,7 @@ package com.dsl.gmap.scanner.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
+import com.dsl.gmap.scanner.engine.ServiceDetector
 import com.dsl.gmap.scanner.model.PortState
 import com.dsl.gmap.scanner.model.ScanSessionSummary
 import com.dsl.gmap.scanner.model.ScanUiState
@@ -19,7 +20,8 @@ import kotlinx.coroutines.withContext
 import java.net.InetAddress
 
 class ScanViewModel(
-    private val scanner: TcpConnectScanner = TcpConnectScanner()
+    private val scanner: TcpConnectScanner = TcpConnectScanner(),
+    private val serviceDetector: ServiceDetector = ServiceDetector()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -116,7 +118,16 @@ class ScanViewModel(
                 }
 
                 val elapsed = System.currentTimeMillis() - startedAt
-                val openPorts = results.filter { it.state == PortState.OPEN }
+                val tcpOpenPorts = results.filter { it.state == PortState.OPEN }
+                _uiState.update {
+                    it.copy(statusMessage = "Identifying services on ${tcpOpenPorts.size} open ports...")
+                }
+                val openPorts = serviceDetector.identify(
+                    address = address,
+                    originalTarget = target,
+                    openPorts = tcpOpenPorts,
+                    timeoutMs = selectedTimeoutMs
+                )
                 val openCount = openPorts.size
                 val closedCount = results.count { it.state == PortState.CLOSED }
                 val filteredCount = results.count { it.state == PortState.FILTERED }
