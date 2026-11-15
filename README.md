@@ -12,9 +12,9 @@ Gmap is an Android network assessment toolkit designed to run without root acces
 - **No background telemetry:** no analytics or cloud upload of scan targets/results.
 - **English-first UI:** user-facing labels, scan states, and documentation are in English.
 
-## Current development branch
+## Current implemented milestone
 
-The `feature/rootless-scanner-v2` branch introduces:
+The `main` branch currently includes:
 
 - A dark, English-language Jetpack Compose interface.
 - A dedicated non-blocking TCP Connect scanning engine using Java NIO `SocketChannel` and `Selector`.
@@ -24,7 +24,7 @@ The `feature/rootless-scanner-v2` branch introduces:
 - Separate `OPEN`, `CLOSED`, `FILTERED`, and `ERROR` outcomes.
 - Scan progress, throughput metrics, and cancellation.
 - A required confirmation that the user owns the target or is authorized to assess it.
-- Bounded, read-only service identification on selected open ports: SSH/FTP/SMTP/POP3/IMAP greetings, MySQL handshake banner, HTTP response headers, Redis PING, PostgreSQL TLS negotiation, and TLS certificate/session details.
+- Bounded, read-only service identification on selected open ports: SSH/FTP/SMTP/POP3/IMAP/VNC greetings, MySQL handshake banner, HTTP response headers, Redis PING, PostgreSQL TLS negotiation, and TLS certificate/session details.
 - In-memory session history with open-port findings and timing statistics.
 
 Service identification is best-effort and protocol-aware only for the implemented probes. It does not attempt authentication, exploit services, or assert vulnerability based solely on a banner. TLS certificate details are available only when the peer completes a handshake accepted by the platform trust configuration.
