@@ -277,10 +277,15 @@ fun ScanScreen(viewModel: ScanViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        MetricCard(Modifier.weight(1f), state.openCount.toString(), "OPEN")
-                        MetricCard(Modifier.weight(1f), state.closedCount.toString(), "CLOSED")
-                        MetricCard(Modifier.weight(1f), state.filteredCount.toString(), "NO RESPONSE")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(Modifier.weight(1f), state.openCount.toString(), "OPEN")
+                            MetricCard(Modifier.weight(1f), state.closedCount.toString(), "CLOSED")
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(Modifier.weight(1f), state.filteredCount.toString(), "NO RESPONSE")
+                            MetricCard(Modifier.weight(1f), state.errorCount.toString(), "ERROR")
+                        }
                     }
                     state.elapsedMs?.let {
                         Text(
