@@ -181,12 +181,24 @@ class ServiceDetector(
                 ssl.startHandshake()
 
                 val certificate = ssl.session.peerCertificates.firstOrNull() as? X509Certificate
+                val hostHeader = originalTarget.takeIf { it.isNotBlank() } ?: address.hostAddress.orEmpty()
+                val httpHeaders = try {
+                    val request = "HEAD / HTTP/1.0\\r\\nHost: $hostHeader\\r\\nUser-Agent: Gmap-Scanner\\r\\nConnection: close\\r\\n\\r\\n"
+                    ssl.getOutputStream().write(request.toByteArray(StandardCharsets.US_ASCII))
+                    ssl.getOutputStream().flush()
+                    readHttpHeaders(ssl)
+                } catch (_: IOException) {
+                    emptyList()
+                }
                 TlsDetails(
                     protocol = ssl.session.protocol,
                     cipher = ssl.session.cipherSuite,
                     subject = certificate?.subjectX500Principal?.name,
                     issuer = certificate?.issuerX500Principal?.name,
-                    expiresAt = certificate?.notAfter?.time
+                    expiresAt = certificate?.notAfter?.time,
+                    httpStatus = httpHeaders.firstOrNull(),
+                    httpServer = httpHeaders.firstOrNull { it.startsWith("Server:", ignoreCase = true) }
+                        ?.substringAfter(':')?.trim()?.take(200)
                 )
             }
         }
@@ -195,6 +207,8 @@ class ServiceDetector(
             serviceHint = "HTTPS / TLS",
             fingerprint = ServiceFingerprint(
                 service = "TLS",
+                banner = details.httpStatus,
+                serverHeader = details.httpServer,
                 tlsVersion = details.protocol,
                 cipherSuite = details.cipher,
                 certificateSubject = details.subject,
@@ -351,7 +365,9 @@ class ServiceDetector(
         val cipher: String,
         val subject: String?,
         val issuer: String?,
-        val expiresAt: Long?
+        val expiresAt: Long?,
+        val httpStatus: String?,
+        val httpServer: String?
     )
 
     companion object {
