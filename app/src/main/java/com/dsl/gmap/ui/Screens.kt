@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radar
@@ -47,8 +48,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dsl.gmap.scanner.model.PortScanResult
-import com.dsl.gmap.scanner.model.PortState
+import com.dsl.gmap.scanner.model.ScanSessionSummary
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(
@@ -126,9 +130,9 @@ fun DashboardScreen(
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.5.sp
         )
-        FeatureRow(Icons.Default.Radar, "TCP port scanning", "Bounded TCP Connect scanning with explicit port states.")
+        FeatureRow(Icons.Default.Radar, "TCP port scanning", "Non-blocking TCP Connect scanning with adaptive socket scheduling.")
         FeatureRow(Icons.Default.CheckCircle, "Service hints", "Recognizes common services by conventional port numbers.")
-        FeatureRow(Icons.Default.Info, "Clear scan results", "Progress, response timing, and honest reporting of inconclusive probes.")
+        FeatureRow(Icons.Default.Info, "Live scan metrics", "Progress, response timing, throughput, and explicit result states.")
 
         Text(
             "Only scan systems and networks you own or are explicitly authorized to assess.",
@@ -141,6 +145,7 @@ fun DashboardScreen(
 @Composable
 fun ScanScreen(viewModel: ScanViewModel) {
     val state by viewModel.uiState.collectAsState()
+    val timeoutMs by viewModel.timeoutMs.collectAsState()
     var target by rememberSaveable { mutableStateOf("") }
     var startPort by rememberSaveable { mutableStateOf("1") }
     var endPort by rememberSaveable { mutableStateOf("1024") }
@@ -169,7 +174,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
             enabled = !state.isScanning
         )
         Text(
-            "This build scans one host at a time. CIDR and subnet discovery are planned for a later milestone.",
+            "This build scans one host at a time. CIDR and subnet discovery are not included yet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -193,6 +198,12 @@ fun ScanScreen(viewModel: ScanViewModel) {
             )
         }
 
+        Text(
+            "Connection timeout: ${timeoutMs} ms (change in Settings)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
                 checked = authorizationConfirmed,
@@ -214,9 +225,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
             }
         } else {
             Button(
-                onClick = {
-                    viewModel.startScan(target, startPort, endPort, authorizationConfirmed)
-                },
+                onClick = { viewModel.startScan(target, startPort, endPort, authorizationConfirmed) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 enabled = authorizationConfirmed,
                 shape = RoundedCornerShape(14.dp)
@@ -242,10 +251,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
                         )
                     }
                     if (state.isScanning) {
-                        LinearProgressIndicator(
-                            progress = { state.progress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                     }
                     Text(
                         "${state.completed} / ${state.total} ports checked",
@@ -295,33 +301,141 @@ fun ScanScreen(viewModel: ScanViewModel) {
 }
 
 @Composable
-fun HistoryScreen() {
-    EmptyFeatureScreen(
-        heading = "Scan history",
-        description = "In-memory session history will be available while Gmap is open. Sessions are cleared when the app process ends; nothing is written to local files or a database."
-    )
-}
+fun HistoryScreen(viewModel: ScanViewModel) {
+    val sessions by viewModel.history.collectAsState()
 
-@Composable
-fun SettingsScreen() {
-    EmptyFeatureScreen(
-        heading = "Settings",
-        description = "Scanner profiles and tuning preferences will be configurable here. Scan targets and results remain in RAM only; Gmap does not create JSON, CSV, text reports, or a local scan database."
-    )
-}
-
-@Composable
-private fun EmptyFeatureScreen(heading: String, description: String) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
-        Spacer(Modifier.height(14.dp))
-        Text(heading, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("SCAN HISTORY", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("This app session", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            if (sessions.isNotEmpty()) {
+                OutlinedButton(onClick = viewModel::clearHistory) {
+                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Clear")
+                }
+            }
+        }
+
+        Text(
+            "History is held in RAM only. It is cleared when the app process ends and is never written to storage.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        if (sessions.isEmpty()) {
+            EmptyFeatureCard(
+                heading = "No scans yet",
+                description = "Completed scans will appear here for this app session."
+            )
+        } else {
+            sessions.forEach { session -> HistorySessionCard(session) }
+        }
+    }
+}
+
+@Composable
+private fun HistorySessionCard(session: ScanSessionSummary) {
+    val dateText = SimpleDateFormat("MMM d, HH:mm", Locale.ENGLISH).format(Date(session.finishedAtEpochMs))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(session.target, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(session.resolvedAddress, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text("$dateText  •  TCP ports ${session.portRange}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricCard(Modifier.weight(1f), session.openCount.toString(), "OPEN")
+                MetricCard(Modifier.weight(1f), session.totalPorts.toString(), "CHECKED")
+                MetricCard(Modifier.weight(1f), "${session.elapsedMs / 1000.0}s", "DURATION")
+            }
+            if (session.openPorts.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Text("OPEN PORTS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                session.openPorts.forEach { PortResultRow(it) }
+            } else {
+                Text("No open TCP ports detected.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(viewModel: ScanViewModel) {
+    val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val options = listOf(500, 1200, 2000, 3500)
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("SCANNER SETTINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text("Connection timeout", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Maximum time to wait for a TCP connection attempt before classifying it as no response. Shorter values can be faster on a reliable LAN; longer values can be more accurate on slow or distant networks.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        options.chunked(2).forEach { rowOptions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowOptions.forEach { option ->
+                    val label = if (option < 1000) "${option} ms" else "${option / 1000.0}s"
+                    if (timeoutMs == option) {
+                        Button(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    } else {
+                        OutlinedButton(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    }
+                }
+                if (rowOptions.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Text("DATA & PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Scan history and findings are kept in memory for this app session only. No scan database, JSON/CSV/TXT reports, preferences, analytics, or cloud sync are used.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "Advanced scanner modules such as subnet discovery, UDP probes, TLS inspection, and protocol-aware service detection are not part of this build yet.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun EmptyFeatureCard(heading: String, description: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
+            Text(heading, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 

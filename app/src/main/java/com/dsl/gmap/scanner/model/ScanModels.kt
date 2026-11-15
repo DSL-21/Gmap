@@ -41,3 +41,22 @@ data class ScanUiState(
     val elapsedMs: Long? = null,
     val probesPerSecond: Double = 0.0
 )
+
+/**
+ * A compact in-memory record. We retain open findings and scan statistics,
+ * rather than every negative probe, to keep session history lightweight.
+ */
+data class ScanSessionSummary(
+    val id: Long,
+    val target: String,
+    val resolvedAddress: String,
+    val portRange: String,
+    val totalPorts: Int,
+    val openCount: Int,
+    val closedCount: Int,
+    val filteredCount: Int,
+    val errorCount: Int,
+    val elapsedMs: Long,
+    val finishedAtEpochMs: Long,
+    val openPorts: List<PortScanResult>
+)

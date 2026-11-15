@@ -65,8 +65,8 @@ fun GmapApp() {
             when (selectedTab) {
                 AppTab.DASHBOARD -> DashboardScreen(onStartScan = { selectedTab = AppTab.SCAN })
                 AppTab.SCAN -> ScanScreen(viewModel = scanViewModel)
-                AppTab.HISTORY -> HistoryScreen()
-                AppTab.SETTINGS -> SettingsScreen()
+                AppTab.HISTORY -> HistoryScreen(viewModel = scanViewModel)
+                AppTab.SETTINGS -> SettingsScreen(viewModel = scanViewModel)
             }
         }
     }

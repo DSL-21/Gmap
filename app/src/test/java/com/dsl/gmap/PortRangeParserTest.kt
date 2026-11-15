@@ -22,9 +22,18 @@ class PortRangeParserTest {
     }
 
     @Test
+    fun acceptsSinglePortAndFullRange() {
+        val single = PortRangeParser.parse("443", "443")
+        assertEquals(1, single?.size)
+        val full = PortRangeParser.parse("1", "65535")
+        assertEquals(65535, full?.size)
+    }
+
+    @Test
     fun rejectsOutOfRangeValues() {
         assertNull(PortRangeParser.parse("0", "80"))
         assertNull(PortRangeParser.parse("1", "65536"))
+        assertNull(PortRangeParser.parse("-1", "80"))
     }
 
     @Test
@@ -33,7 +42,9 @@ class PortRangeParserTest {
     }
 
     @Test
-    fun rejectsNonNumericValues() {
+    fun rejectsNonNumericAndEmptyValues() {
         assertNull(PortRangeParser.parse("http", "443"))
+        assertNull(PortRangeParser.parse("", "443"))
+        assertNull(PortRangeParser.parse("80", " "))
     }
 }

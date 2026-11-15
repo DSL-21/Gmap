@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
 import com.dsl.gmap.scanner.model.PortState
+import com.dsl.gmap.scanner.model.ScanSessionSummary
 import com.dsl.gmap.scanner.model.ScanUiState
 import com.dsl.gmap.scanner.validation.PortRangeParser
 import kotlinx.coroutines.CancellationException
@@ -23,7 +24,22 @@ class ScanViewModel(
 
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
+
+    private val _history = MutableStateFlow<List<ScanSessionSummary>>(emptyList())
+    val history: StateFlow<List<ScanSessionSummary>> = _history.asStateFlow()
+
+    private val _timeoutMs = MutableStateFlow(DEFAULT_TIMEOUT_MS)
+    val timeoutMs: StateFlow<Int> = _timeoutMs.asStateFlow()
+
     private var scanJob: Job? = null
+
+    fun setTimeoutMs(value: Int) {
+        if (value in ALLOWED_TIMEOUTS_MS) _timeoutMs.value = value
+    }
+
+    fun clearHistory() {
+        _history.value = emptyList()
+    }
 
     fun startScan(
         targetInput: String,
@@ -49,6 +65,7 @@ class ScanViewModel(
             return
         }
 
+        val selectedTimeoutMs = _timeoutMs.value
         scanJob = viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             _uiState.value = ScanUiState(
@@ -71,14 +88,13 @@ class ScanViewModel(
                     address = address,
                     startPort = portRange.start,
                     endPort = portRange.end,
-                    timeoutMs = 1200
+                    timeoutMs = selectedTimeoutMs
                 ) { progress, latestResult ->
                     _uiState.update { current ->
                         val updatedOpenPorts = if (latestResult.state == PortState.OPEN) {
                             (current.openPorts + latestResult)
                                 .distinctBy { result -> result.port }
                                 .sortedBy { result -> result.port }
-                                
                         } else {
                             current.openPorts
                         }
@@ -100,22 +116,46 @@ class ScanViewModel(
                 }
 
                 val elapsed = System.currentTimeMillis() - startedAt
-                _uiState.update { current ->
-                    current.copy(
+                val openPorts = results.filter { it.state == PortState.OPEN }
+                val openCount = openPorts.size
+                val closedCount = results.count { it.state == PortState.CLOSED }
+                val filteredCount = results.count { it.state == PortState.FILTERED }
+                val errorCount = results.count { it.state == PortState.ERROR }
+
+                _uiState.update {
+                    it.copy(
                         isScanning = false,
                         completed = results.size,
                         total = results.size,
                         progress = 1f,
-                        openCount = results.count { it.state == PortState.OPEN },
-                        closedCount = results.count { it.state == PortState.CLOSED },
-                        filteredCount = results.count { it.state == PortState.FILTERED },
-                        errorCount = results.count { it.state == PortState.ERROR },
-                        openPorts = results.filter { it.state == PortState.OPEN },
+                        openCount = openCount,
+                        closedCount = closedCount,
+                        filteredCount = filteredCount,
+                        errorCount = errorCount,
+                        openPorts = openPorts,
                         elapsedMs = elapsed,
                         probesPerSecond = if (elapsed > 0) results.size * 1000.0 / elapsed else 0.0,
                         statusMessage = "Scan completed"
                     )
                 }
+
+                val finishedAt = System.currentTimeMillis()
+                val session = ScanSessionSummary(
+                    id = finishedAt,
+                    target = target,
+                    resolvedAddress = address.hostAddress ?: target,
+                    portRange = "${portRange.start}-${portRange.end}",
+                    totalPorts = results.size,
+                    openCount = openCount,
+                    closedCount = closedCount,
+                    filteredCount = filteredCount,
+                    errorCount = errorCount,
+                    elapsedMs = elapsed,
+                    finishedAtEpochMs = finishedAt,
+                    openPorts = openPorts
+                )
+                // Keep only the latest 20 compact summaries in RAM. Nothing is persisted.
+                _history.update { (listOf(session) + it).take(MAX_HISTORY_ITEMS) }
             } catch (cancelled: CancellationException) {
                 _uiState.update { it.copy(isScanning = false, statusMessage = "Scan cancelled") }
                 throw cancelled
@@ -133,5 +173,11 @@ class ScanViewModel(
         _uiState.update {
             it.copy(isScanning = false, statusMessage = message, errorMessage = message)
         }
+    }
+
+    companion object {
+        const val DEFAULT_TIMEOUT_MS = 1200
+        const val MAX_HISTORY_ITEMS = 20
+        val ALLOWED_TIMEOUTS_MS = setOf(500, 1200, 2000, 3500)
     }
 }
