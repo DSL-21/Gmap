@@ -167,7 +167,10 @@ fun ScanScreen(viewModel: ScanViewModel) {
 
         OutlinedTextField(
             value = target,
-            onValueChange = { target = it },
+            onValueChange = {
+                target = it
+                authorizationConfirmed = false
+            },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Target hostname or IP address") },
             placeholder = { Text("192.168.1.1 or example.com") },
