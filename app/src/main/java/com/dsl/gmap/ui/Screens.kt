@@ -1,0 +1,575 @@
+package com.dsl.gmap.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radar
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.dsl.gmap.scanner.model.PortScanResult
+import com.dsl.gmap.scanner.model.ScanSessionSummary
+import com.dsl.gmap.scanner.viewmodel.ScanViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+@Composable
+fun DashboardScreen(
+    onStartScan: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        Text(
+            "NETWORK INTELLIGENCE",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+        Text("Explore your network.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "A practical network assessment toolkit, built to run directly on Android.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(22.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                ) {
+                    Icon(
+                        Icons.Default.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(12.dp).size(26.dp)
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("ROOTLESS BY DESIGN", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "No root access required. Uses standard Android networking APIs.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricCard(Modifier.weight(1f), "TCP", "SCAN METHOD")
+            MetricCard(Modifier.weight(1f), "RAM", "SESSION DATA")
+            MetricCard(Modifier.weight(1f), "0", "ROOT REQUIRED")
+        }
+
+        Button(
+            onClick = onStartScan,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Icon(Icons.Default.PlayArrow, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Start a scan", fontWeight = FontWeight.Bold)
+        }
+
+        Text(
+            "CORE CAPABILITIES",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        )
+        FeatureRow(Icons.Default.Radar, "TCP port scanning", "Non-blocking TCP Connect scanning with adaptive socket scheduling.")
+        FeatureRow(Icons.Default.CheckCircle, "Service identification", "Read-only protocol greetings, HTTP headers, and TLS certificate details where supported.")
+        FeatureRow(Icons.Default.Info, "Live scan metrics", "Progress, response timing, throughput, and explicit result states.")
+
+        Text(
+            "Only scan systems and networks you own or are explicitly authorized to assess.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+fun ScanScreen(viewModel: ScanViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    val timeoutMs by viewModel.timeoutMs.collectAsState()
+    // Target, port input and authorization confirmation are ephemeral by design.
+    var target by remember { mutableStateOf("") }
+    var startPort by remember { mutableStateOf("1") }
+    var endPort by remember { mutableStateOf("1024") }
+    var authorizationConfirmed by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text(
+            "NEW SCAN",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        )
+        Text("TCP Connect scan", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+
+        OutlinedTextField(
+            value = target,
+            onValueChange = {
+                target = it
+                authorizationConfirmed = false
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Target hostname or IP address") },
+            placeholder = { Text("192.168.1.1 or example.com") },
+            singleLine = true,
+            enabled = !state.isScanning
+        )
+        Text(
+            "This build scans one host at a time. CIDR and subnet discovery are not included yet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(
+                value = startPort,
+                onValueChange = { startPort = it.filter(Char::isDigit).take(5) },
+                modifier = Modifier.weight(1f),
+                label = { Text("Start port") },
+                singleLine = true,
+                enabled = !state.isScanning
+            )
+            OutlinedTextField(
+                value = endPort,
+                onValueChange = { endPort = it.filter(Char::isDigit).take(5) },
+                modifier = Modifier.weight(1f),
+                label = { Text("End port") },
+                singleLine = true,
+                enabled = !state.isScanning
+            )
+        }
+
+        Text("QUICK PORT PROFILES", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { startPort = "1"; endPort = "256" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Quick", maxLines = 1)
+            }
+            OutlinedButton(onClick = { startPort = "1"; endPort = "1024" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Well-known", maxLines = 1)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { startPort = "1"; endPort = "10000" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Extended", maxLines = 1)
+            }
+            OutlinedButton(onClick = { startPort = "1"; endPort = "65535" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Full TCP", maxLines = 1)
+            }
+        }
+
+        Text(
+            "Connection timeout: ${timeoutMs} ms (change in Settings)",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = authorizationConfirmed,
+                onCheckedChange = { authorizationConfirmed = it },
+                enabled = !state.isScanning
+            )
+            Text("I own this target or have permission to scan it.", style = MaterialTheme.typography.bodySmall)
+        }
+
+        if (state.isScanning) {
+            OutlinedButton(
+                onClick = viewModel::stopScan,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Stop scan")
+            }
+        } else {
+            Button(
+                onClick = { viewModel.startScan(target, startPort, endPort, authorizationConfirmed) },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                enabled = authorizationConfirmed,
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Start TCP scan", fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (state.isScanning || state.total > 0) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(state.statusMessage, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    state.resolvedAddress?.let {
+                        Text(
+                            "Resolved address: $it",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (state.isScanning) {
+                        LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
+                    }
+                    Text(
+                        "${state.completed} / ${state.total} ports checked",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(Modifier.weight(1f), state.openCount.toString(), "OPEN")
+                            MetricCard(Modifier.weight(1f), state.closedCount.toString(), "CLOSED")
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetricCard(Modifier.weight(1f), state.filteredCount.toString(), "NO RESPONSE")
+                            MetricCard(Modifier.weight(1f), state.errorCount.toString(), "ERROR")
+                        }
+                    }
+                    state.elapsedMs?.let {
+                        Text(
+                            "Elapsed: ${it / 1000.0}s  •  Rate: ${state.probesPerSecond.toLong()} probes/s",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+
+        state.errorMessage?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        if (state.total > 0) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            Text(
+                "OPEN PORTS",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
+            if (state.openPorts.isEmpty()) {
+                Text(
+                    if (state.isScanning) "No open ports found yet." else "No open ports detected.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                state.openPorts.forEach { PortResultRow(it) }
+            }
+        }
+    }
+}
+
+@Composable
+fun HistoryScreen(viewModel: ScanViewModel) {
+    val sessions by viewModel.history.collectAsState()
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("SCAN HISTORY", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("This app session", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            if (sessions.isNotEmpty()) {
+                OutlinedButton(onClick = viewModel::clearHistory) {
+                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Clear")
+                }
+            }
+        }
+
+        Text(
+            "History is held in RAM only. It is cleared when the app process ends and is never written to storage.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        if (sessions.isEmpty()) {
+            EmptyFeatureCard(
+                heading = "No scans yet",
+                description = "Completed scans will appear here for this app session."
+            )
+        } else {
+            sessions.forEach { session -> HistorySessionCard(session) }
+        }
+    }
+}
+
+@Composable
+private fun HistorySessionCard(session: ScanSessionSummary) {
+    val dateText = SimpleDateFormat("MMM d, HH:mm", Locale.ENGLISH).format(Date(session.finishedAtEpochMs))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(session.target, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(session.resolvedAddress, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text("$dateText  •  TCP ports ${session.portRange}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricCard(Modifier.weight(1f), session.openCount.toString(), "OPEN")
+                MetricCard(Modifier.weight(1f), session.totalPorts.toString(), "CHECKED")
+                MetricCard(Modifier.weight(1f), "${session.elapsedMs / 1000.0}s", "DURATION")
+            }
+            if (session.openPorts.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Text("OPEN PORTS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                session.openPorts.forEach { PortResultRow(it) }
+            } else {
+                Text("No open TCP ports detected.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsScreen(viewModel: ScanViewModel) {
+    val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val options = listOf(500, 1200, 2000, 3500)
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("SCANNER SETTINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Text("Connection timeout", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Maximum time to wait for a TCP connection attempt before classifying it as no response. Shorter values can be faster on a reliable LAN; longer values can be more accurate on slow or distant networks.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        options.chunked(2).forEach { rowOptions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowOptions.forEach { option ->
+                    val label = if (option < 1000) "${option} ms" else "${option / 1000.0}s"
+                    if (timeoutMs == option) {
+                        Button(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    } else {
+                        OutlinedButton(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
+                            Text(label)
+                        }
+                    }
+                }
+                if (rowOptions.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Text("DATA & PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "Scan history and findings are kept in memory for this app session only. No scan database, JSON/CSV/TXT reports, preferences, analytics, or cloud sync are used.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "This build includes TCP Connect scanning and bounded, read-only service probes for common protocols. Subnet discovery and UDP scanning are not included yet.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun EmptyFeatureCard(heading: String, description: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(38.dp))
+            Text(heading, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(
+    modifier: Modifier = Modifier,
+    value: String,
+    label: String
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeatureRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
+            Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun PortResultRow(result: PortScanResult) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("${result.port} / TCP", fontWeight = FontWeight.Bold)
+            Text(
+                result.fingerprint?.service ?: result.serviceHint ?: "Unknown service",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            result.fingerprint?.let { fingerprint ->
+                val detailLines = listOfNotNull(
+                    fingerprint.banner?.let { "Banner: $it" },
+                    fingerprint.serverHeader?.let { "Server: $it" },
+                    fingerprint.additionalInfo,
+                    fingerprint.tlsVersion?.let { "TLS: $it" },
+                    fingerprint.cipherSuite?.let { "Cipher: $it" },
+                    fingerprint.certificateSubject?.let { "Certificate subject: $it" },
+                    fingerprint.certificateIssuer?.let { "Certificate issuer: $it" },
+                    fingerprint.certificateExpiresAtEpochMs?.let {
+                        "Certificate expires: ${SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date(it))}"
+                    }
+                )
+                detailLines.forEach { line ->
+                    Text(
+                        line,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), shape = RoundedCornerShape(100.dp)) {
+            Text(
+                result.state.name,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        result.latencyMs?.let {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "${it} ms",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
