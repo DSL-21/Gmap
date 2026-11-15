@@ -14,15 +14,15 @@ Gmap is an Android network assessment toolkit designed to run without root acces
 
 ## Current development branch
 
-The \`feature/rootless-scanner-v2\` branch introduces:
+The `feature/rootless-scanner-v2` branch introduces:
 
 - A dark, English-language Jetpack Compose interface.
-- A dedicated non-blocking TCP Connect scanning engine using Java NIO \`SocketChannel\` and \`Selector\`.
+- A dedicated non-blocking TCP Connect scanning engine using Java NIO `SocketChannel` and `Selector`.
 - Single-host scanning by hostname, IPv4 address, or IPv6 address.
 - User-defined TCP port ranges from 1 to 65535.
 - Adaptive outstanding-probe scheduling that grows to the requested scan size and backs off on OS-level resource exhaustion.
-- Separate \`OPEN\`, \`CLOSED\`, \`FILTERED\`, and \`ERROR\` outcomes.
-- Scan progress and cancellation.
+- Separate `OPEN`, `CLOSED`, `FILTERED`, and `ERROR` outcomes.
+- Scan progress, throughput metrics, and cancellation.
 - A required confirmation that the user owns the target or is authorized to assess it.
 
 The service labels shown in this milestone are hints based on conventional port numbers. They are not the result of protocol-level service or version detection.
@@ -31,9 +31,22 @@ This is an early engine prototype, not a verified speed leader. It needs build v
 
 ## Why not one coroutine per port?
 
-Coroutines are useful for coordination and keeping the UI responsive, but blocking \`Socket.connect()\` still occupies a worker thread. Gmap's new TCP engine uses non-blocking channels registered with one selector, so the scanner can monitor many connection attempts without allocating one blocking worker per port.
+Coroutines are useful for coordination and keeping the UI responsive, but blocking `Socket.connect()` still occupies a worker thread. Gmap's new TCP engine uses non-blocking channels registered with one selector, so the scanner can monitor many connection attempts without allocating one blocking worker per port.
 
 The adaptive window starts based on device CPU availability and the requested scan size. It grows as results arrive. When the OS reports local socket/file-descriptor exhaustion, Gmap reduces the window, waits briefly, and retries the same port rather than silently skipping it.
+
+## Build system
+
+- Android Gradle Plugin: 9.1.1
+- Gradle wrapper: 9.3.1
+- Kotlin: 2.2.10 (AGP built-in Kotlin)
+- Compile SDK: 37
+- Target SDK: 36
+- Minimum SDK: 26
+- JDK: 17
+- UI: Jetpack Compose and Material 3
+
+The app deliberately remains at target SDK 36 for now. Android 17 (API 37) gates direct local-network TCP/UDP access behind the `ACCESS_LOCAL_NETWORK` runtime permission for apps targeting API 37 or higher. Gmap must add and test the full permission flow before raising its target SDK.
 
 ## Rootless design and technical boundaries
 
@@ -44,16 +57,6 @@ The current supported method is TCP Connect scanning. Further rootless modules c
 ## Privacy and storage
 
 Scan targets, port results, host details, and scan history are held in RAM for the active application session only. They are discarded when the process/session ends. There is no automatic file export, JSON/CSV report generation, local database, or cloud sync. A future export feature, if ever added, must be an explicit user-initiated action and must not run automatically.
-
-## Build
-
-Open the project in Android Studio and use the included Gradle wrapper.
-
-- Minimum SDK: 26
-- Compile SDK: 36
-- Target SDK: 36
-- Language: Kotlin
-- UI: Jetpack Compose and Material 3
 
 ## Responsible use
 

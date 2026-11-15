@@ -1,16 +1,18 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // AGP 9 provides built-in Kotlin support.
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.dsl.gmap"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.dsl.gmap"
         minSdk = 26
+        // Keep targetSdk at 36 until ACCESS_LOCAL_NETWORK runtime permission
+        // handling is implemented and tested for Android 17.
         targetSdk = 36
         versionCode = 2
         versionName = "2.0.0"
@@ -35,9 +37,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "11"
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 
