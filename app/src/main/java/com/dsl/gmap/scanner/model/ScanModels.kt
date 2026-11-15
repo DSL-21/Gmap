@@ -7,7 +7,20 @@ data class PortScanResult(
     val state: PortState,
     val latencyMs: Long? = null,
     val serviceHint: String? = null,
-    val detail: String? = null
+    val detail: String? = null,
+    val fingerprint: ServiceFingerprint? = null
+)
+
+data class ServiceFingerprint(
+    val service: String,
+    val banner: String? = null,
+    val serverHeader: String? = null,
+    val additionalInfo: String? = null,
+    val tlsVersion: String? = null,
+    val cipherSuite: String? = null,
+    val certificateSubject: String? = null,
+    val certificateIssuer: String? = null,
+    val certificateExpiresAtEpochMs: Long? = null
 )
 
 data class ScanProgress(
