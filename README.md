@@ -1,45 +1,40 @@
-# 📡 Android Network Scanner
+# Gmap — Rootless Network Scanner for Android
 
-A lightweight Android app for scanning network hosts, detecting open ports, identifying common services, and checking for basic vulnerabilities — all from your phone.
+Gmap is an Android network assessment toolkit designed to run without root access. The long-term goal is to bring practical, Nmap-inspired network discovery and service assessment workflows to a standalone Android application.
 
----
+## Current development milestone
 
-## ✨ Features
+The \`feature/rootless-scanner-v2\` branch introduces the modern application foundation:
 
-- ✅ Port range scanning (TCP)
-- 🌐 DNS resolution & reverse lookup
-- 📶 Host discovery (ICMP & TCP ping)
-- 🔍 Service detection (HTTP, SSH, FTP, SMTP, etc.)
-- ⚠️ Basic vulnerability detection based on service banners
-- 📄 Save scan results to a text file
-- 📊 Real-time progress and output display
+- A dark, English-language Jetpack Compose interface.
+- A dedicated TCP Connect scanning engine.
+- Single-host scanning by hostname, IPv4 address, or IPv6 address.
+- User-defined TCP port ranges from 1 to 65535.
+- Bounded worker concurrency instead of one coroutine per port.
+- Separate \`OPEN\`, \`CLOSED\`, \`FILTERED\`, and \`ERROR\` outcomes.
+- Scan progress and cancellation.
+- A required confirmation that the user owns the target or is authorized to assess it.
 
----
+The service labels shown in this milestone are hints based on conventional port numbers. They are not the result of protocol-level service or version detection.
 
-## 📲 Getting Started
+## Rootless design and technical boundaries
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/DSL-21/Gmap.git
-Open in Android Studio
+Gmap uses standard Android networking APIs. It does not require root access, Termux, or an external computer.
 
-Build & run on a physical device or emulator
+A normal Android application cannot assume access to privileged raw-packet capabilities. Therefore, this project does not claim to implement raw TCP SYN scanning, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode, or packet injection.
 
-## 📱 Requirements
-Android 9 (API 28) or higher
+The current scanner uses TCP Connect probes. A timeout is reported as \`FILTERED\` / no response because a silent timeout cannot prove that a port is closed. UDP probing, host discovery, protocol-level service detection, TLS inspection, security checks, scan history, and report export are planned as separate modules.
 
-Internet access
+## Build
 
-File write permissions (for Android <10)
+Open the project in Android Studio and use the included Gradle wrapper.
 
-## 🔐 Permissions
-INTERNET – to scan network targets
+- Minimum SDK: 26
+- Compile SDK: 36
+- Target SDK: 36
+- Language: Kotlin
+- UI: Jetpack Compose and Material 3
 
-WRITE_EXTERNAL_STORAGE – for saving scan reports (Android < Q)
+## Responsible use
 
-Scoped Storage is used on Android 10+
-
-## ⚠️ Disclaimer
-This app is intended only for educational and ethical purposes.
-Use it only on networks and systems you own or have explicit permission to test.
-The author is not responsible for misuse or illegal activity.
+Use Gmap only on systems and networks that you own or have explicit permission to assess. Scanning may trigger monitoring, alerts, or service rate limits. Start with small port ranges and conservative timeouts when testing unfamiliar environments.
