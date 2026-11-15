@@ -210,10 +210,10 @@ class ServiceDetector(
         val banner = Socket().use { socket ->
             connect(socket, address, result.port, timeoutMs)
             socket.soTimeout = timeoutMs.coerceIn(300, MAX_TIMEOUT_MS)
-            val bytes = readBytes(socket, 256)
-            if (bytes.size < 2 || bytes[0].toInt() != 10) null
+            val packet = readMysqlGreeting(socket)
+            if (packet.isEmpty() || packet[0].toInt() != 10) null
             else {
-                val version = bytes.copyOfRange(1, bytes.size)
+                val version = packet.copyOfRange(1, packet.size)
                     .takeWhile { it.toInt() != 0 }
                     .toByteArray()
                     .toString(StandardCharsets.US_ASCII)
@@ -295,18 +295,26 @@ class ServiceDetector(
         return output.toString(StandardCharsets.UTF_8.name()).takeIf { it.isNotBlank() }
     }
 
-    private fun readBytes(socket: Socket, maxBytes: Int): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(128)
-        while (output.size() < maxBytes) {
-            val count = socket.getInputStream().read(buffer, 0, minOf(buffer.size, maxBytes - output.size()))
-            if (count <= 0) break
-            output.write(buffer, 0, count)
-            // MySQL greeting packets are length-prefixed; a short read is enough
-            // for the protocol version and server-version string.
-            if (output.size() >= 64) break
+    private fun readMysqlGreeting(socket: Socket): ByteArray {
+        val input = socket.getInputStream()
+        val header = ByteArray(4)
+        readFully(input, header)
+        val payloadLength = (header[0].toInt() and 0xff) or
+            ((header[1].toInt() and 0xff) shl 8) or
+            ((header[2].toInt() and 0xff) shl 16)
+        if (payloadLength <= 0) return byteArrayOf()
+        val payload = ByteArray(minOf(payloadLength, 252))
+        readFully(input, payload)
+        return payload
+    }
+
+    private fun readFully(input: java.io.InputStream, target: ByteArray) {
+        var offset = 0
+        while (offset < target.size) {
+            val count = input.read(target, offset, target.size - offset)
+            if (count < 0) throw IOException("Incomplete service greeting.")
+            offset += count
         }
-        return output.toByteArray()
     }
 
     private fun readHttpHeaders(socket: Socket): List<String> {
