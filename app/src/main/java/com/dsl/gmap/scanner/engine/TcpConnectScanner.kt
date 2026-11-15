@@ -8,6 +8,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.net.BindException
 import java.net.ConnectException
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -316,12 +317,20 @@ class TcpConnectScanner {
     }
 
     private fun isLocalResourceExhaustion(exception: IOException): Boolean {
+        // BindException can indicate exhaustion of the ephemeral local port
+        // range during a high-concurrency connect scan.
+        if (exception is BindException) return true
+
         val message = exception.message.orEmpty().lowercase()
         return message.contains("too many open files") ||
             message.contains("emfile") ||
             message.contains("enfile") ||
             message.contains("resource temporarily unavailable") ||
-            message.contains("no file descriptors available")
+            message.contains("no file descriptors available") ||
+            message.contains("cannot assign requested address") ||
+            message.contains("address not available") ||
+            message.contains("eaddrnotavail") ||
+            message.contains("no buffer space available")
     }
 
     private fun commonServiceHint(port: Int): String? = when (port) {
