@@ -171,7 +171,7 @@ class ServiceDetector(
         val details = Socket().use { plain ->
             connect(plain, address, result.port, timeoutMs)
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-            factory.createSocket(plain, host, result.port, true).use { ssl ->
+            (factory.createSocket(plain, host, result.port, true) as SSLSocket).use { ssl ->
                 ssl.soTimeout = timeoutMs.coerceIn(300, MAX_TIMEOUT_MS)
                 val parameters = ssl.sslParameters
                 parameters.endpointIdentificationAlgorithm = "HTTPS"
