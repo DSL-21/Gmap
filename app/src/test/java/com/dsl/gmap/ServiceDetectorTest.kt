@@ -25,7 +25,13 @@ class ServiceDetectorTest {
                     while (reader.readLine()?.isNotEmpty() == true) {
                         // Consume the HEAD request headers.
                     }
-                    val response = "HTTP/1.1 200 OK\\r\\nServer: Gmap-Test-Server\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"
+                    val lineBreak = 13.toChar().toString() + 10.toChar()
+                    val response = listOf(
+                        "HTTP/1.1 200 OK",
+                        "Server: Gmap-Test-Server",
+                        "Content-Length: 0",
+                        "Connection: close"
+                    ).joinToString(separator = lineBreak, postfix = lineBreak + lineBreak)
                     client.getOutputStream().write(response.toByteArray(StandardCharsets.US_ASCII))
                     client.getOutputStream().flush()
                 }
