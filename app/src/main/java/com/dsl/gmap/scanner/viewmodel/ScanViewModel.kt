@@ -71,8 +71,7 @@ class ScanViewModel(
                     address = address,
                     startPort = portRange.start,
                     endPort = portRange.end,
-                    timeoutMs = 1200,
-                    parallelism = 48
+                    timeoutMs = 1200
                 ) { progress, latestResult ->
                     _uiState.update { current ->
                         val updatedOpenPorts = if (latestResult.state == PortState.OPEN) {
