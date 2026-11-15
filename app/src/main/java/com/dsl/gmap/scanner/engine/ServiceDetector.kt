@@ -77,7 +77,7 @@ class ServiceDetector(
                 25 -> identifyGreeting(address, result, timeoutMs, "SMTP")
                 110 -> identifyGreeting(address, result, timeoutMs, "POP3")
                 143 -> identifyGreeting(address, result, timeoutMs, "IMAP")
-                5900 -> identifyGreeting(address, result, timeoutMs, "VNC")
+                5900 -> identifyVnc(address, result, timeoutMs)
                 3306 -> identifyMysql(address, result, timeoutMs)
                 in httpPorts -> identifyHttp(address, originalTarget, result, timeoutMs)
                 in tlsPorts -> identifyTls(address, originalTarget, result, timeoutMs)
@@ -212,6 +212,28 @@ class ServiceDetector(
                 certificateSubject = details.subject,
                 certificateIssuer = details.issuer,
                 certificateExpiresAtEpochMs = details.expiresAt
+            )
+        )
+    }
+
+    private fun identifyVnc(
+        address: InetAddress,
+        result: PortScanResult,
+        timeoutMs: Int
+    ): PortScanResult {
+        val banner = Socket().use { socket ->
+            connect(socket, address, result.port, timeoutMs)
+            val greeting = ByteArray(12)
+            readFully(socket.getInputStream(), greeting)
+            sanitize(greeting.toString(StandardCharsets.US_ASCII))
+        }
+        val isVnc = banner.startsWith("RFB ")
+        val service = if (isVnc) "VNC" else result.serviceHint ?: "Unknown TCP service"
+        return result.copy(
+            serviceHint = service,
+            fingerprint = ServiceFingerprint(
+                service = service,
+                banner = banner
             )
         )
     }
