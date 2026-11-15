@@ -39,7 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,7 +131,7 @@ fun DashboardScreen(
             letterSpacing = 1.5.sp
         )
         FeatureRow(Icons.Default.Radar, "TCP port scanning", "Non-blocking TCP Connect scanning with adaptive socket scheduling.")
-        FeatureRow(Icons.Default.CheckCircle, "Service hints", "Recognizes common services by conventional port numbers.")
+        FeatureRow(Icons.Default.CheckCircle, "Service identification", "Read-only protocol greetings, HTTP headers, and TLS certificate details where supported.")
         FeatureRow(Icons.Default.Info, "Live scan metrics", "Progress, response timing, throughput, and explicit result states.")
 
         Text(
@@ -146,10 +146,11 @@ fun DashboardScreen(
 fun ScanScreen(viewModel: ScanViewModel) {
     val state by viewModel.uiState.collectAsState()
     val timeoutMs by viewModel.timeoutMs.collectAsState()
-    var target by rememberSaveable { mutableStateOf("") }
-    var startPort by rememberSaveable { mutableStateOf("1") }
-    var endPort by rememberSaveable { mutableStateOf("1024") }
-    var authorizationConfirmed by rememberSaveable { mutableStateOf(false) }
+    // Target, port input and authorization confirmation are ephemeral by design.
+    var target by remember { mutableStateOf("") }
+    var startPort by remember { mutableStateOf("1") }
+    var endPort by remember { mutableStateOf("1024") }
+    var authorizationConfirmed by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -196,6 +197,24 @@ fun ScanScreen(viewModel: ScanViewModel) {
                 singleLine = true,
                 enabled = !state.isScanning
             )
+        }
+
+        Text("QUICK PORT PROFILES", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { startPort = "1"; endPort = "256" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Quick", maxLines = 1)
+            }
+            OutlinedButton(onClick = { startPort = "1"; endPort = "1024" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Well-known", maxLines = 1)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { startPort = "1"; endPort = "10000" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Extended", maxLines = 1)
+            }
+            OutlinedButton(onClick = { startPort = "1"; endPort = "65535" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
+                Text("Full TCP", maxLines = 1)
+            }
         }
 
         Text(
@@ -413,7 +432,7 @@ fun SettingsScreen(viewModel: ScanViewModel) {
             style = MaterialTheme.typography.bodyMedium
         )
         Text(
-            "Advanced scanner modules such as subnet discovery, UDP probes, TLS inspection, and protocol-aware service detection are not part of this build yet.",
+            "This build includes TCP Connect scanning and bounded, read-only service probes for common protocols. Subnet discovery and UDP scanning are not included yet.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
@@ -499,10 +518,33 @@ private fun PortResultRow(result: PortScanResult) {
         Column(modifier = Modifier.weight(1f)) {
             Text("${result.port} / TCP", fontWeight = FontWeight.Bold)
             Text(
-                result.serviceHint ?: "Unknown service",
+                result.fingerprint?.service ?: result.serviceHint ?: "Unknown service",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
+            result.fingerprint?.let { fingerprint ->
+                val detailLines = listOfNotNull(
+                    fingerprint.banner?.let { "Banner: $it" },
+                    fingerprint.serverHeader?.let { "Server: $it" },
+                    fingerprint.additionalInfo,
+                    fingerprint.tlsVersion?.let { "TLS: $it" },
+                    fingerprint.cipherSuite?.let { "Cipher: $it" },
+                    fingerprint.certificateSubject?.let { "Certificate subject: $it" },
+                    fingerprint.certificateIssuer?.let { "Certificate issuer: $it" },
+                    fingerprint.certificateExpiresAtEpochMs?.let {
+                        "Certificate expires: ${SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date(it))}"
+                    }
+                )
+                detailLines.forEach { line ->
+                    Text(
+                        line,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
         Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), shape = RoundedCornerShape(100.dp)) {
             Text(
