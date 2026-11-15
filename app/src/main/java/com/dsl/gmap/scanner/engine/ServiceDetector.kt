@@ -31,7 +31,9 @@ import javax.net.ssl.SSLSocketFactory
  * A small worker pool avoids creating one coroutine per open port.
  */
 class ServiceDetector(
-    private val workerCount: Int = DEFAULT_WORKERS
+    private val workerCount: Int = DEFAULT_WORKERS,
+    private val httpPorts: Set<Int> = DEFAULT_HTTP_PORTS,
+    private val tlsPorts: Set<Int> = DEFAULT_TLS_PORTS
 ) {
     suspend fun identify(
         address: InetAddress,
@@ -79,8 +81,8 @@ class ServiceDetector(
                 143 -> identifyGreeting(address, result, timeoutMs, "IMAP")
                 5900 -> identifyGreeting(address, result, timeoutMs, "VNC")
                 3306 -> identifyMysql(address, result, timeoutMs)
-                80, 8000, 8008, 8080, 8888 -> identifyHttp(address, originalTarget, result, timeoutMs)
-                443, 8443, 9443 -> identifyTls(address, originalTarget, result, timeoutMs)
+                in httpPorts -> identifyHttp(address, originalTarget, result, timeoutMs)
+                in tlsPorts -> identifyTls(address, originalTarget, result, timeoutMs)
                 5432 -> identifyPostgres(address, result, timeoutMs)
                 6379 -> identifyRedis(address, result, timeoutMs)
                 else -> result
@@ -354,6 +356,8 @@ class ServiceDetector(
 
     companion object {
         const val DEFAULT_WORKERS = 8
+        private val DEFAULT_HTTP_PORTS = setOf(80, 8000, 8008, 8080, 8888)
+        private val DEFAULT_TLS_PORTS = setOf(443, 8443, 9443)
         private const val MAX_TIMEOUT_MS = 4000
         private const val MAX_BANNER_BYTES = 512
         private const val MAX_HTTP_HEADER_BYTES = 4096
