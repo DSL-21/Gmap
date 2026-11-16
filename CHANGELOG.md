@@ -19,6 +19,7 @@
 - Added CORS, modern browser security-header and cookie-attribute checks.
 - Added public endpoint checks for security.txt, robots.txt, OpenAPI metadata and exposed Git HEAD.
 - Added optional CPE/CVE correlation for versioned web server headers with NVD, CISA KEV and FIRST EPSS.
+- Explicitly enabled user-initiated HTTP auditing on Android 9+ and added a warning that HTTP requests are unencrypted.
 
 ### Interface, privacy and validation
 - Expanded result details for local devices, web endpoints, identified products and CVE/KEV/EPSS findings.

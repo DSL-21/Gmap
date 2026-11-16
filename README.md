@@ -47,6 +47,7 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 - Cookie attribute checks for Secure, HttpOnly and SameSite.
 - A synthetic-origin CORS check for reflected credentialed origins.
 - Same-host redirect tracking, with a limited GET fallback when a server rejects HEAD.
+- Explicit HTTP support for user-initiated audits. HTTP requests are unauthenticated and unencrypted; the UI warns users not to supply credentials or sensitive URL parameters.
 - Checks for `/.well-known/security.txt`, `/robots.txt`, `/openapi.json` and `/.git/HEAD`. Only the Git metadata check reads a tiny, bounded response sample to confirm a Git reference.
 - Findings include severity, evidence and remediation guidance.
 
@@ -69,6 +70,7 @@ TCP, UDP and Web results are held in application memory. Recent results are not 
 - Minimum Android version: Android 8.0 (API 26).
 - Compile SDK: 37.
 - Target SDK: 37 (Android 17).
+- Cleartext HTTP is permitted because the Web module audits user-selected HTTP endpoints; it sends only unauthenticated, read-only requests. Prefer HTTPS whenever available.
 - Android 17 local-network access is requested at runtime when a LAN operation is started for a local address or local hostname. Public internet targets do not trigger that permission prompt.
 - Local subnet discovery requires local-network access.
 

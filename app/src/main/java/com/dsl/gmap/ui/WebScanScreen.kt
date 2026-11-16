@@ -68,6 +68,13 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
             placeholder = { Text("example.com") },
             singleLine = true
         )
+        if (target.trim().startsWith("http://", ignoreCase = true)) {
+            Text(
+                "HTTP is unencrypted. Gmap sends unauthenticated, read-only audit requests only. Do not enter credentials or sensitive URL parameters.",
+                color = MaterialTheme.colorScheme.tertiary,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Button(
             onClick = {
                 val start = { viewModel.startAudit() }
