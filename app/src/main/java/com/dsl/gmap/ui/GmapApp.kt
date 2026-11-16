@@ -91,7 +91,7 @@ fun GmapApp() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             if (showSettings) {
-                SettingsScreen(viewModel = scanViewModel)
+                SettingsScreen(viewModel = scanViewModel, webAuditViewModel = webAuditViewModel)
             } else {
                 when (selectedTab) {
                     AppTab.DASHBOARD -> DashboardScreen(onStartScan = { target ->

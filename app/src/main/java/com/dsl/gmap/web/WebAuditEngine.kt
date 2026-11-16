@@ -1,5 +1,7 @@
 package com.dsl.gmap.web
 
+import com.dsl.gmap.scanner.model.SoftwareIdentity
+import com.dsl.gmap.scanner.model.VulnerabilityFinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -41,7 +43,11 @@ data class WebAuditResult(
     val redirectChain: List<String> = emptyList(),
     val certificateSans: List<String> = emptyList(),
     val usedGetFallback: Boolean = false,
-    val resources: List<WebResourceCheck> = emptyList()
+    val resources: List<WebResourceCheck> = emptyList(),
+    val softwareIdentities: List<SoftwareIdentity> = emptyList(),
+    val vulnerabilityFindings: List<VulnerabilityFinding> = emptyList(),
+    val intelligenceMessage: String? = null,
+    val intelligenceWarnings: List<String> = emptyList()
 )
 
 class WebAuditEngine {

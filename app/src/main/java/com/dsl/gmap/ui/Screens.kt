@@ -57,6 +57,7 @@ import com.dsl.gmap.scanner.model.PortScanResult
 import com.dsl.gmap.scanner.model.ScanSessionSummary
 import com.dsl.gmap.scanner.model.VulnerabilityFinding
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
+import com.dsl.gmap.web.WebAuditViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -709,9 +710,10 @@ private fun HistorySessionCard(session: ScanSessionSummary) {
 }
 
 @Composable
-fun SettingsScreen(viewModel: ScanViewModel) {
+fun SettingsScreen(viewModel: ScanViewModel, webAuditViewModel: WebAuditViewModel) {
     val timeoutMs by viewModel.timeoutMs.collectAsState()
     val onlineIntelligenceEnabled by viewModel.onlineIntelligenceEnabled.collectAsState()
+    val webOnlineIntelligenceEnabled by webAuditViewModel.onlineIntelligenceEnabled.collectAsState()
     val options = listOf(500, 1200, 2000, 3500)
 
     Column(
@@ -753,6 +755,17 @@ fun SettingsScreen(viewModel: ScanViewModel) {
             Switch(
                 checked = onlineIntelligenceEnabled,
                 onCheckedChange = viewModel::setOnlineIntelligenceEnabled
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("WEB CVE INTELLIGENCE", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Correlate exposed web server versions with NVD, CISA KEV and FIRST EPSS.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(
+                checked = webOnlineIntelligenceEnabled,
+                onCheckedChange = webAuditViewModel::setOnlineIntelligenceEnabled
             )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
