@@ -20,7 +20,8 @@ data class ServiceFingerprint(
     val cipherSuite: String? = null,
     val certificateSubject: String? = null,
     val certificateIssuer: String? = null,
-    val certificateExpiresAtEpochMs: Long? = null
+    val certificateExpiresAtEpochMs: Long? = null,
+    val software: SoftwareIdentity? = null
 )
 
 data class ScanProgress(
@@ -39,6 +40,7 @@ data class ScanProgress(
 
 data class ScanUiState(
     val isScanning: Boolean = false,
+    val isAssessing: Boolean = false,
     val target: String = "",
     val resolvedAddress: String? = null,
     val statusMessage: String = "Ready",
@@ -51,14 +53,14 @@ data class ScanUiState(
     val filteredCount: Int = 0,
     val errorCount: Int = 0,
     val openPorts: List<PortScanResult> = emptyList(),
+    val softwareIdentities: List<SoftwareIdentity> = emptyList(),
+    val vulnerabilityFindings: List<VulnerabilityFinding> = emptyList(),
+    val intelligenceMessage: String? = null,
+    val intelligenceWarnings: List<String> = emptyList(),
     val elapsedMs: Long? = null,
     val probesPerSecond: Double = 0.0
 )
 
-/**
- * A compact in-memory record. We retain open findings and scan statistics,
- * rather than every negative probe, to keep session history lightweight.
- */
 data class ScanSessionSummary(
     val id: Long,
     val target: String,
@@ -71,5 +73,9 @@ data class ScanSessionSummary(
     val errorCount: Int,
     val elapsedMs: Long,
     val finishedAtEpochMs: Long,
-    val openPorts: List<PortScanResult>
+    val openPorts: List<PortScanResult>,
+    val softwareIdentities: List<SoftwareIdentity> = emptyList(),
+    val vulnerabilityFindings: List<VulnerabilityFinding> = emptyList(),
+    val intelligenceMessage: String? = null,
+    val intelligenceWarnings: List<String> = emptyList()
 )

@@ -71,7 +71,7 @@ class ServiceDetector(
         timeoutMs: Int
     ): PortScanResult {
         return try {
-            when (result.port) {
+            val identified = when (result.port) {
                 22 -> identifyGreeting(address, result, timeoutMs, "SSH")
                 21 -> identifyGreeting(address, result, timeoutMs, "FTP")
                 25 -> identifyGreeting(address, result, timeoutMs, "SMTP")
@@ -85,6 +85,13 @@ class ServiceDetector(
                 6379 -> identifyRedis(address, result, timeoutMs)
                 else -> result
             }
+            val fingerprint = identified.fingerprint
+            if (fingerprint == null) identified
+            else identified.copy(
+                fingerprint = fingerprint.copy(
+                    software = SoftwareFingerprintParser.identify(fingerprint)
+                )
+            )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (exception: Exception) {
