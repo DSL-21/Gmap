@@ -22,30 +22,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
-import com.dsl.gmap.web.WebAuditEngine
-import com.dsl.gmap.web.WebAuditResult
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
-fun WebScanScreen() {
-    var target by remember { mutableStateOf("") }
-    var isScanning by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var result by remember { mutableStateOf<WebAuditResult?>(null) }
-    val scope = rememberCoroutineScope()
+fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    val target = state.target
+    val isScanning = state.isScanning
+    val result = state.result
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -60,7 +50,7 @@ fun WebScanScreen() {
         )
         OutlinedTextField(
             value = target,
-            onValueChange = { target = it },
+            onValueChange = viewModel::setTarget,
             modifier = Modifier.fillMaxWidth(),
             enabled = !isScanning,
             label = { Text("Hostname or URL") },
@@ -68,22 +58,7 @@ fun WebScanScreen() {
             singleLine = true
         )
         Button(
-            onClick = {
-                isScanning = true
-                error = null
-                result = null
-                scope.launch {
-                    try {
-                        result = WebAuditEngine().scan(target)
-                    } catch (cancelled: CancellationException) {
-                        throw cancelled
-                    } catch (exception: Exception) {
-                        error = exception.message ?: "Web audit failed."
-                    } finally {
-                        isScanning = false
-                    }
-                }
-            },
+            onClick = viewModel::startAudit,
             enabled = target.isNotBlank() && !isScanning,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(14.dp)
@@ -94,7 +69,7 @@ fun WebScanScreen() {
         }
 
         if (isScanning) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         result?.let { audit ->
             Card(

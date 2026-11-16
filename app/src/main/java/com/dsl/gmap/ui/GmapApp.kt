@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
+import com.dsl.gmap.web.WebAuditViewModel
 
 private enum class AppTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Network", Icons.Default.Dashboard),
@@ -40,6 +41,7 @@ private enum class AppTab(val label: String, val icon: ImageVector) {
 fun GmapApp() {
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.DASHBOARD) }
     val scanViewModel: ScanViewModel = viewModel()
+    val webAuditViewModel: WebAuditViewModel = viewModel()
 
     Scaffold(
         topBar = {
@@ -67,8 +69,8 @@ fun GmapApp() {
             when (selectedTab) {
                 AppTab.DASHBOARD -> DashboardScreen(onStartScan = { selectedTab = AppTab.SCAN })
                 AppTab.SCAN -> ScanScreen(viewModel = scanViewModel)
-                AppTab.WEB -> WebScanScreen()
-                AppTab.HISTORY -> HistoryScreen(viewModel = scanViewModel)
+                AppTab.WEB -> WebScanScreen(viewModel = webAuditViewModel)
+                AppTab.HISTORY -> HistoryScreen(viewModel = scanViewModel, webAuditViewModel = webAuditViewModel)
                 AppTab.SETTINGS -> SettingsScreen(viewModel = scanViewModel)
             }
         }
