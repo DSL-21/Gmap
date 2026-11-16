@@ -28,7 +28,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * surfaced by Android is classified CLOSED. A silent probe remains OPEN_FILTERED:
  * absence of a UDP response cannot distinguish an open service from packet filtering.
  */
-class UdpProbeScanner {
+class UdpProbeScanner(
+    private val probePayloadOverride: ((Int) -> ByteArray)? = null
+) {
     suspend fun scan(
         address: InetAddress,
         startPort: Int,
@@ -62,7 +64,7 @@ class UdpProbeScanner {
     }
 
     private fun probe(address: InetAddress, port: Int, timeoutMs: Int): UdpPortScanResult {
-        val payload = payloadFor(port)
+        val payload = probePayloadOverride?.invoke(port) ?: payloadFor(port)
         val startedAt = System.nanoTime()
 
         return try {
