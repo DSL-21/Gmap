@@ -33,7 +33,9 @@ import javax.net.ssl.SSLSocketFactory
 class ServiceDetector(
     private val workerCount: Int = DEFAULT_WORKERS,
     private val httpPorts: Set<Int> = DEFAULT_HTTP_PORTS,
-    private val tlsPorts: Set<Int> = DEFAULT_TLS_PORTS
+    private val tlsPorts: Set<Int> = DEFAULT_TLS_PORTS,
+    private val smbPorts: Set<Int> = DEFAULT_SMB_PORTS,
+    private val rdpPorts: Set<Int> = DEFAULT_RDP_PORTS
 ) {
     suspend fun identify(
         address: InetAddress,
@@ -80,8 +82,8 @@ class ServiceDetector(
                 110 -> identifyGreeting(address, result, timeoutMs, "POP3")
                 143 -> identifyGreeting(address, result, timeoutMs, "IMAP")
                 5900 -> identifyVnc(address, result, timeoutMs)
-                445 -> identifySmb(address, result, timeoutMs)
-                3389 -> identifyRdp(address, result, timeoutMs)
+                in smbPorts -> identifySmb(address, result, timeoutMs)
+                in rdpPorts -> identifyRdp(address, result, timeoutMs)
                 3306 -> identifyMysql(address, result, timeoutMs)
                 in httpPorts -> identifyHttp(address, originalTarget, result, timeoutMs)
                 in tlsPorts -> identifyTls(address, originalTarget, result, timeoutMs)

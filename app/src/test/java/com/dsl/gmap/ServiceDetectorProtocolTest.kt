@@ -46,7 +46,7 @@ class ServiceDetectorProtocolTest {
             }
             worker.start()
 
-            val result = ServiceDetector().identify(
+            val result = ServiceDetector(smbPorts = setOf(server.localPort)).identify(
                 address = server.inetAddress,
                 originalTarget = "127.0.0.1",
                 openPorts = listOf(PortScanResult(server.localPort, PortState.OPEN)),
@@ -83,7 +83,7 @@ class ServiceDetectorProtocolTest {
             }
             worker.start()
 
-            val result = ServiceDetector().identify(
+            val result = ServiceDetector(rdpPorts = setOf(server.localPort)).identify(
                 address = server.inetAddress,
                 originalTarget = "127.0.0.1",
                 openPorts = listOf(PortScanResult(server.localPort, PortState.OPEN)),
