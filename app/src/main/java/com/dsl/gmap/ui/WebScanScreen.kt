@@ -21,11 +21,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +41,7 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
     val target = state.target
     val isScanning = state.isScanning
     val result = state.result
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -96,6 +99,37 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
                     }
                     audit.redirectLocation?.let { Text("Redirect: $it") }
                 }
+            }
+
+            OutlinedButton(
+                onClick = {
+                    val report = buildString {
+                        appendLine("Gmap Web Audit")
+                        appendLine("Target: ${audit.url}")
+                        appendLine("HTTP: ${audit.httpStatus}")
+                        appendLine("Resolved: ${audit.resolvedAddresses.joinToString(", ")}")
+                        audit.tlsCipherSuite?.let { appendLine("TLS cipher: $it") }
+                        audit.certificateSubject?.let { appendLine("Certificate subject: $it") }
+                        audit.certificateIssuer?.let { appendLine("Certificate issuer: $it") }
+                        appendLine()
+                        appendLine("Response headers")
+                        audit.responseHeaders.forEach { (name, values) ->
+                            appendLine("$name: ${values.joinToString(", ")}")
+                        }
+                        appendLine()
+                        appendLine("Findings")
+                        audit.findings.forEach { finding ->
+                            appendLine("[${finding.severity}] ${finding.title}")
+                            appendLine("Evidence: ${finding.evidence}")
+                            appendLine("Recommendation: ${finding.recommendation}")
+                            appendLine()
+                        }
+                    }
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Gmap Web Audit", report))
+                }
+            ) {
+                Text("Copy audit report")
             }
 
             Text(

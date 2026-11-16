@@ -71,11 +71,10 @@ class UdpScanViewModel(
                     endPort = range.end
                 ) { completed, total, latest ->
                     _uiState.update { current ->
-                        val stored = when (latest.state) {
-                            UdpPortState.OPEN, UdpPortState.OPEN_FILTERED -> (
-                                current.results.filterNot { it.port == latest.port } + latest
-                            ).sortedBy { it.port }
-                            else -> current.results.filterNot { it.port == latest.port }
+                        val stored = if (latest.state == UdpPortState.OPEN) {
+                            (current.results.filterNot { it.port == latest.port } + latest).sortedBy { it.port }
+                        } else {
+                            current.results.filterNot { it.port == latest.port }
                         }
                         current.copy(
                             completed = completed,
@@ -95,7 +94,7 @@ class UdpScanViewModel(
                 val closedCount = results.count { it.state == UdpPortState.CLOSED }
                 val openFilteredCount = results.count { it.state == UdpPortState.OPEN_FILTERED }
                 val errorCount = results.count { it.state == UdpPortState.ERROR }
-                val visible = results.filter { it.state == UdpPortState.OPEN || it.state == UdpPortState.OPEN_FILTERED }
+                val visible = results.filter { it.state == UdpPortState.OPEN }
 
                 _uiState.update {
                     it.copy(

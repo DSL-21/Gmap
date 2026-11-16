@@ -149,6 +149,14 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
             }
         }
 
+        if (state.total > 0 && state.results.isEmpty() && !state.isScanning) {
+            Text(
+                "No UDP service returned a response. ${state.openFilteredCount} ports did not reply.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
         state.results.forEach { result ->
             Card(
                 modifier = Modifier.fillMaxWidth(),

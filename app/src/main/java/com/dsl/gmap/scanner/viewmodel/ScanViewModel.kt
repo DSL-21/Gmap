@@ -35,6 +35,17 @@ class ScanViewModel(
 
     private var scanJob: Job? = null
 
+    private val _prefillTarget = MutableStateFlow("")
+    val prefillTarget: StateFlow<String> = _prefillTarget.asStateFlow()
+
+    fun setPrefillTarget(value: String) {
+        _prefillTarget.value = value
+    }
+
+    fun clearPrefillTarget() {
+        _prefillTarget.value = ""
+    }
+
     fun setTimeoutMs(value: Int) {
         if (value in ALLOWED_TIMEOUTS_MS) _timeoutMs.value = value
     }

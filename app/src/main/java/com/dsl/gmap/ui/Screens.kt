@@ -5,6 +5,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,7 +86,7 @@ fun ScannerHubScreen(
 
 @Composable
 fun DashboardScreen(
-    onStartScan: () -> Unit
+    onStartScan: (String) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -221,7 +223,7 @@ fun DashboardScreen(
 
         discoveredHosts.forEach { host ->
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable { onStartScan(host.address) },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(14.dp)
             ) {
@@ -266,7 +268,7 @@ fun DashboardScreen(
         }
 
         OutlinedButton(
-            onClick = onStartScan,
+            onClick = { onStartScan("") },
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.Default.Search, contentDescription = null)
@@ -298,10 +300,18 @@ private fun NetworkInfoRow(label: String, value: String) {
 fun ScanScreen(viewModel: ScanViewModel) {
     val state by viewModel.uiState.collectAsState()
     val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val prefillTarget by viewModel.prefillTarget.collectAsState()
     // Scan inputs are ephemeral and are not persisted.
     var target by remember { mutableStateOf("") }
     var startPort by remember { mutableStateOf("1") }
     var endPort by remember { mutableStateOf("1024") }
+
+    LaunchedEffect(prefillTarget) {
+        if (prefillTarget.isNotBlank()) {
+            target = prefillTarget
+            viewModel.clearPrefillTarget()
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -326,7 +336,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
             enabled = !state.isScanning
         )
         Text(
-            "This build scans one host at a time. CIDR and subnet discovery are not included yet.",
+            "Use Network to discover hosts on the active local IPv4 subnet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -482,7 +492,7 @@ fun HistoryScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("FINDINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                Text("This app session", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Recent results", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
             if (sessions.isNotEmpty() || webAudits.isNotEmpty() || udpSessions.isNotEmpty()) {
                 OutlinedButton(onClick = {
@@ -646,7 +656,7 @@ fun SettingsScreen(viewModel: ScanViewModel) {
             style = MaterialTheme.typography.bodyMedium
         )
         Text(
-            "This build includes TCP Connect scanning and bounded, read-only service probes for common protocols. Subnet discovery and UDP scanning are not included yet.",
+            "TCP, UDP and Web audit findings are retained in RAM for this app session.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )

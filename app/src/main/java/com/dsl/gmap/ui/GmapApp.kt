@@ -69,7 +69,10 @@ fun GmapApp() {
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
             when (selectedTab) {
-                AppTab.DASHBOARD -> DashboardScreen(onStartScan = { selectedTab = AppTab.SCAN })
+                AppTab.DASHBOARD -> DashboardScreen(onStartScan = { target ->
+                    if (target.isNotBlank()) scanViewModel.setPrefillTarget(target)
+                    selectedTab = AppTab.SCAN
+                })
                 AppTab.SCAN -> ScannerHubScreen(tcpViewModel = scanViewModel, udpViewModel = udpScanViewModel)
                 AppTab.WEB -> WebScanScreen(viewModel = webAuditViewModel)
                 AppTab.HISTORY -> HistoryScreen(viewModel = scanViewModel, webAuditViewModel = webAuditViewModel, udpScanViewModel = udpScanViewModel)
