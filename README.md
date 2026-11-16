@@ -1,61 +1,73 @@
-# Gmap — Rootless Network Scanner for Android
+# Gmap — Rootless Android Network Scanner
 
-Gmap is an Android network assessment toolkit designed to run without root access. Its goal is to bring fast, practical, Nmap-inspired discovery and assessment workflows to a standalone Android application.
+Gmap is a native Android network scanner and security-audit toolkit built with Kotlin, Jetpack Compose and standard Android networking APIs. It runs without root or a companion computer.
 
-## Project principles
+## Modules
 
-- **Rootless first:** use standard Android networking APIs; do not require root, Termux, or an external computer.
-- **Performance matters:** optimize probe scheduling, socket handling, response timing, and result processing. Do not impose arbitrary low concurrency limits.
-- **Adaptive resource use:** expand outstanding TCP probes while the device and OS allow it; back off on real local resource pressure and retry affected probes.
-- **Accuracy over fake speed:** a timeout is not proof that a port is closed.
-- **Memory-only by default:** scan results and session summaries exist only in application memory. Gmap does not write scan results to JSON, CSV, text files, a database, shared preferences, or external storage.
-- **No background telemetry:** no analytics or cloud upload of scan targets/results.
-- **English-first UI:** user-facing labels, scan states, and documentation are in English.
+### Network
+- Active connection type, interface, IPv4/IPv6 addresses, default gateway and DNS servers.
+- Local IPv4 discovery for subnets from /22 through /30.
+- TCP presence probes on ports 22, 80, 443, 445, 8080 and 3389.
+- A discovered device can be opened directly in the single-host TCP scanner.
 
-## Current implemented milestone
+Local discovery uses ordinary TCP connections, not ARP. A device that does not answer any of the selected TCP ports will not appear in the discovered-device list.
 
-The `main` branch currently includes:
+### TCP host scanner
+- One hostname, IPv4 address or IPv6 address per scan.
+- Custom port ranges from 1 to 65535.
+- Quick (1–256), Well-known (1–1024), Extended (1–10000) and Full TCP (1–65535) presets.
+- Non-blocking TCP Connect engine built with Java NIO `SocketChannel` and `Selector`.
+- Adaptive probe window, local socket-resource backoff, cancellation and progress metrics.
+- Port states: `OPEN`, `CLOSED`, `FILTERED` and `ERROR`.
+- Read-only service identification for selected SSH, FTP, SMTP, POP3, IMAP, VNC, MySQL, HTTP, TLS, Redis and PostgreSQL services.
 
-- A dark, English-language Jetpack Compose interface.
-- A dedicated non-blocking TCP Connect scanning engine using Java NIO `SocketChannel` and `Selector`.
-- Single-host scanning by hostname, IPv4 address, or IPv6 address.
-- User-defined TCP port ranges from 1 to 65535, with Quick, Well-known, Extended, and Full TCP presets.
-- Adaptive outstanding-probe scheduling that grows to the requested scan size and backs off on OS-level resource exhaustion.
-- Separate `OPEN`, `CLOSED`, `FILTERED`, and `ERROR` outcomes.
-- Scan progress, throughput metrics, and cancellation.
-- Bounded, read-only service identification on selected open ports: SSH/FTP/SMTP/POP3/IMAP/VNC greetings, MySQL handshake banner, HTTP response headers, Redis PING, PostgreSQL TLS negotiation, and TLS certificate/session details.
-- In-memory session history with open-port findings and timing statistics.
+### UDP probe scanner
+- Custom UDP ranges up to 512 ports per run.
+- DNS, NTP, SSDP and mDNS protocol-aware probes; other ports receive a zero-length UDP datagram.
+- A received response is `OPEN`.
+- An ICMP port-unreachable surfaced by Android is `CLOSED`.
+- A silent probe is `OPEN|FILTERED`; silence is not reported as confirmed closed.
+- Results and history are held in RAM.
 
-Service identification is best-effort and protocol-aware only for the implemented probes. It does not attempt authentication, exploit services, or assert vulnerability based solely on a banner. TLS certificate details are available only when the peer completes a handshake accepted by the platform trust configuration.
+### Web audit
+- DNS resolution and HTTP/HTTPS response status.
+- TLS cipher and peer certificate subject, issuer and expiry where the platform handshake succeeds.
+- Checks for HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking-related headers, Referrer-Policy, Server disclosure and cookie attributes.
+- Findings include severity, evidence and a remediation suggestion.
+- A Web audit report can be copied explicitly from the Web screen.
 
-This remains a development build, not a verified speed leader. It needs successful CI and controlled benchmarks on real Android devices before performance claims can be made.
+The Web module checks response configuration and headers. It is not a web application exploit scanner, does not test authenticated application flows and does not correlate detected software versions with a CVE database.
 
-## Why not one coroutine per port?
+### Findings
+Host TCP scans, UDP scans and Web audits are grouped in one screen. Recent results stay in application memory only; they are not written to a database, files, preferences or a cloud service.
 
-Coroutines are useful for coordination and keeping the UI responsive, but blocking `Socket.connect()` still occupies a worker thread. Gmap's new TCP engine uses non-blocking channels registered with one selector, so the scanner can monitor many connection attempts without allocating one blocking worker per port.
+## Technical limits
 
-The adaptive window starts based on device CPU availability and the requested scan size. It grows as results arrive. When the OS reports local socket/file-descriptor exhaustion, Gmap reduces the window, waits briefly, and retries the same port rather than silently skipping it.
+Gmap uses standard Android networking APIs. It does not claim raw TCP SYN, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode or packet injection. Local device discovery uses TCP presence probes.
 
-## Build system
+UDP silence is inherently inconclusive. Some UDP services do not respond to an unauthenticated request, and firewalls may suppress ICMP errors.
+
+The app targets Android SDK 36 and supports Android 8.0 (API 26) or later. Android 17/API 37 local-network permission handling must be implemented and tested before raising targetSdk to 37.
+
+## Build
 
 - Android Gradle Plugin: 9.1.1
 - Gradle wrapper: 9.3.1
 - Kotlin: 2.2.10 (AGP built-in Kotlin)
+- JDK: 17
 - Compile SDK: 37
 - Target SDK: 36
 - Minimum SDK: 26
-- JDK: 17
 - UI: Jetpack Compose and Material 3
 
-The app deliberately remains at target SDK 36 for now. Android 17 (API 37) gates direct local-network TCP/UDP access behind the `ACCESS_LOCAL_NETWORK` runtime permission for apps targeting API 37 or higher. Gmap must add and test the full permission flow before raising its target SDK.
+Build and run unit tests:
 
-## Rootless design and technical boundaries
+```bash
+./gradlew --no-daemon testDebugUnitTest assembleDebug
+```
 
-A normal Android application cannot assume access to privileged raw-packet capabilities. Therefore, this project does not claim to implement raw TCP SYN scanning, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode, or packet injection.
+The release workflow currently produces a CI debug-signed APK for direct device testing. It is not a separately production-signed Google Play package.
 
-The supported port-discovery method is TCP Connect scanning. Read-only application-layer identification is performed only against ports that TCP scanning confirmed OPEN. UDP application-level probes, subnet discovery, and broader security assessment are planned modules, not current capabilities.
+## Performance validation
 
-## Privacy and storage
-
-Scan targets, port results, host details, and scan history are held in RAM for the active application session only. They are discarded when the process/session ends. There is no automatic file export, JSON/CSV report generation, local database, or cloud sync. A future export feature, if ever added, must be an explicit user-initiated action and must not run automatically.
-
+CI unit tests cover TCP scanning, UDP reply handling, subnet calculation and HTTP header analysis. Device-level compatibility, battery impact and comparative Nmap `-sT` benchmarks still need to be measured on physical Android devices before performance claims are made.
