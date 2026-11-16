@@ -95,25 +95,27 @@ fun DashboardScreen(
     var discoveredHosts by remember { mutableStateOf<List<com.dsl.gmap.network.DiscoveredHost>>(emptyList()) }
     var discoveryProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var discoveryError by remember { mutableStateOf<String?>(null) }
-
     val localIpv4 = network.addresses.firstOrNull { it.contains('.') && it.contains('/') }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "NETWORK",
-                modifier = Modifier.weight(1f),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    "NETWORK",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                )
+                Text(
+                    network.connectionType,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             OutlinedButton(
                 onClick = {
                     network = com.dsl.gmap.network.ActiveNetworkInspector.inspect(context)
@@ -126,36 +128,59 @@ fun DashboardScreen(
             }
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-
-        NetworkInfoRow("Connection", network.connectionType)
-        NetworkInfoRow("Interface", network.interfaceName ?: "—")
-        NetworkInfoRow(
-            "IP address",
-            network.addresses.ifEmpty { listOf("—") }.joinToString("\n")
-        )
-        NetworkInfoRow("Gateway", network.gateway ?: "—")
-        NetworkInfoRow(
-            "DNS",
-            network.dnsServers.ifEmpty { listOf("—") }.joinToString("\n")
-        )
-
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "LOCAL IP",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    localIpv4?.substringBefore('/') ?: "Not connected",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("GATEWAY", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(network.gateway ?: "—", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("INTERFACE", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Text(network.interfaceName ?: "—", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("DNS", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        network.dnsServers.ifEmpty { listOf("—") }.joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "LOCAL DEVICES",
+                "DEVICES",
                 modifier = Modifier.weight(1f),
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
-            Text(
-                discoveredHosts.size.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text(discoveredHosts.size.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
 
         Button(
@@ -165,7 +190,7 @@ fun DashboardScreen(
                 } else {
                     val cidr = localIpv4
                     if (cidr == null) {
-                        discoveryError = "No active IPv4 network was found."
+                        discoveryError = "No active IPv4 network."
                     } else {
                         discoveredHosts = emptyList()
                         discoveryProgress = 0 to 0
@@ -178,7 +203,7 @@ fun DashboardScreen(
                             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                                 throw cancelled
                             } catch (exception: Exception) {
-                                discoveryError = exception.message ?: "Network discovery failed."
+                                discoveryError = exception.message ?: "Discovery failed."
                             } finally {
                                 discoveryJob = null
                             }
@@ -194,13 +219,13 @@ fun DashboardScreen(
                 contentDescription = null
             )
             Spacer(Modifier.width(8.dp))
-            Text(if (discoveryJob != null) "Stop discovery" else "Discover devices")
+            Text(if (discoveryJob != null) "Stop discovery" else "Scan local network")
         }
 
         discoveryProgress?.let { (done, total) ->
             if (discoveryJob != null) {
                 Text(
-                    "Checking $done / $total addresses",
+                    "Scanning ${done} / ${total}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -208,12 +233,10 @@ fun DashboardScreen(
                     progress = { if (total > 0) done.toFloat() / total else 0f },
                     modifier = Modifier.fillMaxWidth()
                 )
+            } else if (discoveryError == null && discoveredHosts.isEmpty()) {
+                Text("No responding hosts found.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             } else if (discoveryError == null) {
-                Text(
-                    "Discovery finished · $done / $total addresses checked",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text("${done} / ${total} addresses checked", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -227,29 +250,14 @@ fun DashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Column(
+                Row(
                     modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            host.address,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "${host.openPorts.size} OPEN",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(host.address, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(host.openPorts.joinToString(" · ") { "${it}/tcp" }.ifBlank { "No detected open ports" }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
-                    Text(
-                        host.openPorts.joinToString(" · ") { "$it/tcp" },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
-                    )
                     Text(
                         "${host.latencyMs} ms",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -257,14 +265,6 @@ fun DashboardScreen(
                     )
                 }
             }
-        }
-
-        if (discoveryProgress == null && discoveredHosts.isEmpty()) {
-            Text(
-                "No discovery results yet.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall
-            )
         }
 
         OutlinedButton(
@@ -491,7 +491,7 @@ fun HistoryScreen(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("FINDINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("RESULTS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Text("Recent results", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
             if (sessions.isNotEmpty() || webAudits.isNotEmpty() || udpSessions.isNotEmpty()) {
@@ -509,8 +509,8 @@ fun HistoryScreen(
 
         if (sessions.isEmpty() && webAudits.isEmpty() && udpSessions.isEmpty()) {
             EmptyFeatureCard(
-                heading = "No findings yet",
-                description = "Host scans, UDP probes and web audits will appear here for this app session."
+                heading = "No results yet",
+                description = "Your scan results will appear here."
             )
         }
 
@@ -622,10 +622,10 @@ fun SettingsScreen(viewModel: ScanViewModel) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("SCANNER SETTINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-        Text("Connection timeout", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("SCAN TIMEOUT", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+        Text("TCP connection wait", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "Maximum time to wait for a TCP connection attempt before classifying it as no response. Shorter values can be faster on a reliable LAN; longer values can be more accurate on slow or distant networks.",
+            "Choose how long each connection attempt may wait.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -649,16 +649,11 @@ fun SettingsScreen(viewModel: ScanViewModel) {
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-        Text("DATA & PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Scan history and findings are kept in memory for this app session only. No scan database, JSON/CSV/TXT reports, preferences, analytics, or cloud sync are used.",
+            "Scan history stays in memory and clears when Gmap closes.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
-        )
-        Text(
-            "TCP, UDP and Web audit findings are retained in RAM for this app session.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall
         )
     }
 }
