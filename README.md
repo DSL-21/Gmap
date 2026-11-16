@@ -4,7 +4,7 @@ Gmap is a native Android network scanner and security-audit toolkit built with K
 
 ## Modules
 
-Gmap 2.3.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.3.1 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 
 ### Network
@@ -39,12 +39,11 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 - TLS cipher and peer certificate subject, issuer and expiry where the platform handshake succeeds.
 - Checks for HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking-related headers, Referrer-Policy, Server disclosure and cookie attributes.
 - Findings include severity, evidence and a remediation suggestion.
-- A Web audit report can be copied explicitly from the Web screen.
 
 The Web module checks response configuration and headers. It is not a web application exploit scanner and does not test authenticated application flows. TCP service identities can be correlated with NVD CVEs, CISA KEV and FIRST EPSS when online intelligence is enabled. These are assessment leads, not proof of exploitability; vendor backports and distribution patches must be verified.
 
 ### Findings
-Host TCP scans, UDP scans and Web audits are grouped in one screen. Recent results stay in application memory only; they are not written to a database, files, preferences or a cloud service.
+Host TCP scans, UDP scans and Web audits are grouped in one screen. Recent results stay in application memory only; they are not exported, copied to the clipboard or written to a database, files, preferences or a cloud service.
 
 ## Technical limits
 
@@ -71,7 +70,7 @@ Build and run unit tests:
 ./gradlew --no-daemon testDebugUnitTest assembleDebug
 ```
 
-The release workflow currently produces a CI debug-signed APK for direct device testing. It is not a separately production-signed Google Play package.
+The release workflow produces a CI debug-signed APK for direct device testing. It is not a separately production-signed Google Play package.
 
 ## Performance validation
 
