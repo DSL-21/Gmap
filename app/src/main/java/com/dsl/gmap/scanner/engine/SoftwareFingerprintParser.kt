@@ -69,7 +69,7 @@ object SoftwareFingerprintParser {
         val safeVersion = version.filter { it.isLetterOrDigit() || it in "._+-" }
         // CPE represents OpenSSH p-levels as the separate update component.
         val openSshParts = if (vendor == "openbsd" && product == "openssh") {
-            Regex("""^(\\d+(?:\\.\\d+)*)(p\\d+)$""").matchEntire(safeVersion)
+            Regex("""^(\d+(?:\.\d+)*)(p\d+)$""").matchEntire(safeVersion)
         } else null
         val cpeVersion = openSshParts?.groupValues?.get(1) ?: safeVersion
         val cpeUpdate = openSshParts?.groupValues?.get(2) ?: "*"

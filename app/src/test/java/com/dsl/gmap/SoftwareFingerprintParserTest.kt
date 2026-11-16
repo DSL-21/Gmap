@@ -14,7 +14,7 @@ class SoftwareFingerprintParserTest {
         )
         assertEquals("OpenSSH", identity?.displayName)
         assertEquals("9.6p1", identity?.version)
-        assertEquals("cpe:2.3:a:openbsd:openssh:9.6p1:*:*:*:*:*:*:*", identity?.cpeName)
+        assertEquals("cpe:2.3:a:openbsd:openssh:9.6:p1:*:*:*:*:*:*", identity?.cpeName)
     }
 
     @Test
