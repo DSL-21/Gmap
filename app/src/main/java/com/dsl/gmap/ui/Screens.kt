@@ -1,3 +1,6 @@
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Search
 package com.dsl.gmap.ui
 
 import androidx.compose.foundation.background
@@ -57,7 +60,14 @@ fun DashboardScreen(
     onStartScan: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     var network by remember { mutableStateOf(com.dsl.gmap.network.ActiveNetworkInspector.inspect(context)) }
+    var discoveryJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var discoveredHosts by remember { mutableStateOf<List<com.dsl.gmap.network.DiscoveredHost>>(emptyList()) }
+    var discoveryProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var discoveryError by remember { mutableStateOf<String?>(null) }
+
+    val localIpv4 = network.addresses.firstOrNull { it.contains('.') && it.contains('/') }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -76,7 +86,12 @@ fun DashboardScreen(
                 letterSpacing = 1.5.sp
             )
             OutlinedButton(
-                onClick = { network = com.dsl.gmap.network.ActiveNetworkInspector.inspect(context) }
+                onClick = {
+                    network = com.dsl.gmap.network.ActiveNetworkInspector.inspect(context)
+                    discoveredHosts = emptyList()
+                    discoveryProgress = null
+                    discoveryError = null
+                }
             ) {
                 Text("Refresh")
             }
@@ -96,16 +111,140 @@ fun DashboardScreen(
             network.dnsServers.ifEmpty { listOf("—") }.joinToString("\n")
         )
 
-        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "LOCAL DEVICES",
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Text(
+                discoveredHosts.size.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
         Button(
-            onClick = onStartScan,
-            modifier = Modifier.fillMaxWidth().height(54.dp),
+            onClick = {
+                if (discoveryJob != null) {
+                    discoveryJob?.cancel()
+                } else {
+                    val cidr = localIpv4
+                    if (cidr == null) {
+                        discoveryError = "No active IPv4 network was found."
+                    } else {
+                        discoveredHosts = emptyList()
+                        discoveryProgress = 0 to 0
+                        discoveryError = null
+                        discoveryJob = scope.launch {
+                            try {
+                                discoveredHosts = com.dsl.gmap.network.NetworkDiscoveryScanner().scan(cidr) { done, total ->
+                                    discoveryProgress = done to total
+                                }
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (exception: Exception) {
+                                discoveryError = exception.message ?: "Network discovery failed."
+                            } finally {
+                                discoveryJob = null
+                            }
+                        }
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null)
+            Icon(
+                if (discoveryJob != null) Icons.Default.Stop else Icons.Default.Radar,
+                contentDescription = null
+            )
             Spacer(Modifier.width(8.dp))
-            Text("Scan host", fontWeight = FontWeight.Bold)
+            Text(if (discoveryJob != null) "Stop discovery" else "Discover devices")
+        }
+
+        discoveryProgress?.let { (done, total) ->
+            if (discoveryJob != null) {
+                Text(
+                    "Checking $done / $total addresses",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                LinearProgressIndicator(
+                    progress = { if (total > 0) done.toFloat() / total else 0f },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (discoveryError == null) {
+                Text(
+                    "Discovery finished · $done / $total addresses checked",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        discoveryError?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        discoveredHosts.forEach { host ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            host.address,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "${host.openPorts.size} OPEN",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        host.openPorts.joinToString(" · ") { "$it/tcp" },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        "${host.latencyMs} ms",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+
+        if (discoveryProgress == null && discoveredHosts.isEmpty()) {
+            Text(
+                "No discovery results yet.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        OutlinedButton(
+            onClick = onStartScan,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Scan a host")
         }
     }
 }
