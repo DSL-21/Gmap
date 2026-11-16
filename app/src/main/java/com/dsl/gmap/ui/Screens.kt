@@ -440,8 +440,12 @@ fun ScanScreen(viewModel: ScanViewModel) {
 }
 
 @Composable
-fun HistoryScreen(viewModel: ScanViewModel) {
+fun HistoryScreen(
+    viewModel: ScanViewModel,
+    webAuditViewModel: com.dsl.gmap.web.WebAuditViewModel
+) {
     val sessions by viewModel.history.collectAsState()
+    val webAudits by webAuditViewModel.history.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -449,11 +453,14 @@ fun HistoryScreen(viewModel: ScanViewModel) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("SCAN HISTORY", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Text("FINDINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Text("This app session", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
-            if (sessions.isNotEmpty()) {
-                OutlinedButton(onClick = viewModel::clearHistory) {
+            if (sessions.isNotEmpty() || webAudits.isNotEmpty()) {
+                OutlinedButton(onClick = {
+                    viewModel.clearHistory()
+                    webAuditViewModel.clearHistory()
+                }) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Clear")
@@ -461,19 +468,45 @@ fun HistoryScreen(viewModel: ScanViewModel) {
             }
         }
 
-        Text(
-            "History is held in RAM only. It is cleared when the app process ends and is never written to storage.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall
-        )
-
-        if (sessions.isEmpty()) {
+        if (sessions.isEmpty() && webAudits.isEmpty()) {
             EmptyFeatureCard(
-                heading = "No scans yet",
-                description = "Completed scans will appear here for this app session."
+                heading = "No findings yet",
+                description = "Host scans and web audits will appear here for this app session."
             )
-        } else {
+        }
+
+        if (sessions.isNotEmpty()) {
+            Text("HOST SCANS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             sessions.forEach { session -> HistorySessionCard(session) }
+        }
+
+        if (webAudits.isNotEmpty()) {
+            Text("WEB AUDITS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            webAudits.forEach { audit ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(audit.host, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(audit.url, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("HTTP ${audit.httpStatus}")
+                            Text("${audit.findings.size} findings", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                        audit.findings.take(4).forEach { finding ->
+                            Text(
+                                "${finding.severity.name} · ${finding.title}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
