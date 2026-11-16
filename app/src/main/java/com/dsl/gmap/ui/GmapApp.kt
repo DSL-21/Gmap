@@ -32,7 +32,7 @@ private enum class AppTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Network", Icons.Default.Dashboard),
     SCAN("Scan", Icons.Default.Search),
     WEB("Web", Icons.Default.Info),
-    HISTORY("History", Icons.Default.History),
+    HISTORY("Findings", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings)
 }
 
