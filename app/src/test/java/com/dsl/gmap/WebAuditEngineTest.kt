@@ -46,7 +46,10 @@ class WebAuditEngineTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun rejectsUnsupportedSchemes() = runBlocking {
-        WebAuditEngine().scan("ftp://example.com")
+    fun rejectsUnsupportedSchemes() {
+        runBlocking {
+            WebAuditEngine().scan("ftp://example.com")
+            Unit
+        }
     }
 }
