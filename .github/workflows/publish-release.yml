@@ -51,34 +51,35 @@ jobs:
         run: |
           mkdir -p release-assets
           cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.4.0.apk
-          cd release-assets
-          sha256sum gmap-2.4.0.apk > gmap-2.4.0.apk.sha256
-          cat > release-notes.md <<'EOF'
-## Gmap 2.4.0
-
-### What's new
-- Android 17/API 37 target with runtime local-network permission for LAN scans and local Web targets.
-- Parallel local network discovery with 27 common TCP probes and likely device-role labels.
-- Expanded read-only service fingerprints for SMB2 and RDP negotiation, plus broader HTTP/TLS port coverage.
-- CPE 2.3 fingerprints for additional web stacks including PHP, Tomcat, Jetty, OpenResty, Gunicorn, Uvicorn, Werkzeug, HAProxy and Traefik.
-- Expanded Web audit: HEAD fallback, same-host redirects, CORS, modern security headers, TLS SANs and public endpoint checks.
-- Explicit user-initiated HTTP auditing, with a clear UI warning that HTTP traffic is unencrypted.
-- Optional Web server CPE/CVE correlation with NVD, CISA KEV and FIRST EPSS.
-- Improved UI for public endpoint status, identified software, CVE/KEV/EPSS and remediation evidence.
-- Recent results remain RAM-only; no report exports, clipboard export, database or cloud sync.
-
-### Download
-Download **gmap-2.4.0.apk** for Android 8.0 (API 26) or later.
-
-### Build and scope
-This is a CI debug-signed APK for direct device testing, not a production-keystore or Google Play package. A SHA-256 checksum is included. Local discovery uses TCP presence probes rather than ARP. UDP silence is reported as OPEN|FILTERED. Web audit is a read-only configuration and public-metadata audit, not an exploit scanner. HTTP checks are unauthenticated and unencrypted; never enter credentials or sensitive URL parameters. Gmap does not claim raw TCP SYN, raw ICMP crafting, Wi-Fi monitor mode or packet injection. The app targets Android SDK 37 and requests ACCESS_LOCAL_NETWORK for local network operations.
-EOF
+          (cd release-assets && sha256sum gmap-2.4.0.apk > gmap-2.4.0.apk.sha256)
+          cat > release-assets/release-notes.md <<'EOF'
+          ## Gmap 2.4.0
+          
+          ### What's new
+          - Android 17/API 37 target with runtime local-network permission for LAN scans and local Web targets.
+          - Parallel local network discovery with 27 common TCP probes and likely device-role labels.
+          - Expanded read-only service fingerprints for SMB2 and RDP negotiation, plus broader HTTP/TLS port coverage.
+          - CPE 2.3 fingerprints for additional web stacks including PHP, Tomcat, Jetty, OpenResty, Gunicorn, Uvicorn, Werkzeug, HAProxy and Traefik.
+          - Expanded Web audit: HEAD fallback, same-host redirects, CORS, modern security headers, TLS SANs and public endpoint checks.
+          - Explicit user-initiated HTTP auditing, with a clear UI warning that HTTP traffic is unencrypted.
+          - Optional Web server CPE/CVE correlation with NVD, CISA KEV and FIRST EPSS.
+          - Improved UI for public endpoint status, identified software, CVE/KEV/EPSS and remediation evidence.
+          - Recent results remain RAM-only; no report exports, clipboard export, database or cloud sync.
+          
+          ### Download
+          Download **gmap-2.4.0.apk** for Android 8.0 (API 26) or later.
+          
+          ### Build and scope
+          This is a CI debug-signed APK for direct device testing, not a production-keystore or Google Play package. A SHA-256 checksum is included. Local discovery uses TCP presence probes rather than ARP. UDP silence is reported as OPEN|FILTERED. Web audit is a read-only configuration and public-metadata audit, not an exploit scanner. HTTP checks are unauthenticated and unencrypted; never enter credentials or sensitive URL parameters. Gmap does not claim raw TCP SYN, raw ICMP crafting, Wi-Fi monitor mode or packet injection. The app targets Android SDK 37 and requests ACCESS_LOCAL_NETWORK for local network operations.
+          EOF
 
       - name: Create or update GitHub Release and upload APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view v2.4.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Replace the preliminary release created by an earlier successful build.
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v2.4.0" -f sha="$GITHUB_SHA" -F force=true
             gh release upload v2.4.0 \
               release-assets/gmap-2.4.0.apk \
               release-assets/gmap-2.4.0.apk.sha256 \
