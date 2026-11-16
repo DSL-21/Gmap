@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import com.dsl.gmap.web.WebAuditEngine
@@ -55,7 +56,7 @@ fun WebScanScreen() {
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5f
+            letterSpacing = 1.5.sp
         )
         OutlinedTextField(
             value = target,
