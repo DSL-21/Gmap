@@ -67,7 +67,13 @@ object SoftwareFingerprintParser {
         evidence: String
     ): SoftwareIdentity {
         val safeVersion = version.filter { it.isLetterOrDigit() || it in "._+-" }
-        val cpe = "cpe:2.3:a:$vendor:$product:$safeVersion:*:*:*:*:*:*:*"
+        // CPE represents OpenSSH p-levels as the separate update component.
+        val openSshParts = if (vendor == "openbsd" && product == "openssh") {
+            Regex("""^(\\d+(?:\\.\\d+)*)(p\\d+)$""").matchEntire(safeVersion)
+        } else null
+        val cpeVersion = openSshParts?.groupValues?.get(1) ?: safeVersion
+        val cpeUpdate = openSshParts?.groupValues?.get(2) ?: "*"
+        val cpe = "cpe:2.3:a:$vendor:$product:$cpeVersion:$cpeUpdate:*:*:*:*:*:*"
         return SoftwareIdentity(
             vendor = vendor,
             product = product,

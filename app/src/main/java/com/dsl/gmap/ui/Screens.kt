@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -49,10 +50,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dsl.gmap.scanner.model.PortScanResult
 import com.dsl.gmap.scanner.model.ScanSessionSummary
+import com.dsl.gmap.scanner.model.VulnerabilityFinding
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -392,7 +395,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
             ) {
                 Icon(Icons.Default.Stop, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Stop scan")
+                Text(if (state.isAssessing) "Cancel assessment" else "Stop scan")
             }
         } else {
             Button(
@@ -470,6 +473,58 @@ fun ScanScreen(viewModel: ScanViewModel) {
                 )
             } else {
                 state.openPorts.forEach { PortResultRow(it) }
+            }
+        }
+
+        if (state.total > 0 && (!state.isScanning || state.isAssessing || state.softwareIdentities.isNotEmpty())) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+            Text(
+                "SECURITY INTELLIGENCE",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (state.softwareIdentities.isNotEmpty()) {
+                        Text("IDENTIFIED SOFTWARE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        state.softwareIdentities.forEach { identity ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(identity.displayName + " " + identity.version, fontWeight = FontWeight.SemiBold)
+                                Text(identity.cpeName, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    if (state.isAssessing) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Text("Querying NVD, CISA KEV and FIRST EPSS...", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    }
+                    state.intelligenceMessage?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    state.intelligenceWarnings.forEach {
+                        Text(it, color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (!state.isAssessing && state.vulnerabilityFindings.isEmpty() && state.softwareIdentities.isNotEmpty()) {
+                        Text(
+                            "No matching CVE records were returned. This is not proof that the host is free of vulnerabilities.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+            state.vulnerabilityFindings.take(25).forEach { VulnerabilityResultCard(it) }
+            if (state.vulnerabilityFindings.size > 25) {
+                Text("Showing 25 of " + state.vulnerabilityFindings.size + " findings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -609,6 +664,21 @@ private fun HistorySessionCard(session: ScanSessionSummary) {
             } else {
                 Text("No open TCP ports detected.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
+            if (session.softwareIdentities.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Text("IDENTIFIED SOFTWARE", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                session.softwareIdentities.forEach { identity ->
+                    Text(identity.displayName + " " + identity.version, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (session.vulnerabilityFindings.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Text("VULNERABILITIES · " + session.vulnerabilityFindings.size, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                session.vulnerabilityFindings.take(5).forEach { VulnerabilityResultCard(it) }
+            }
+            session.intelligenceMessage?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
@@ -616,6 +686,7 @@ private fun HistorySessionCard(session: ScanSessionSummary) {
 @Composable
 fun SettingsScreen(viewModel: ScanViewModel) {
     val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val onlineIntelligenceEnabled by viewModel.onlineIntelligenceEnabled.collectAsState()
     val options = listOf(500, 1200, 2000, 3500)
 
     Column(
@@ -649,9 +720,20 @@ fun SettingsScreen(viewModel: ScanViewModel) {
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("ONLINE CVE INTELLIGENCE", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Check identified product versions against NVD, CISA KEV and FIRST EPSS after a scan.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(
+                checked = onlineIntelligenceEnabled,
+                onCheckedChange = viewModel::setOnlineIntelligenceEnabled
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Text("PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Scan history stays in memory and clears when Gmap closes.",
+            "Scan history and findings stay in RAM only. Online lookups send product CPEs and CVE IDs to public providers, never target IP addresses or hostnames. No scan database, report files, analytics or cloud sync are used.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -746,6 +828,8 @@ private fun PortResultRow(result: PortScanResult) {
                     fingerprint.banner?.let { "Banner: $it" },
                     fingerprint.serverHeader?.let { "Server: $it" },
                     fingerprint.additionalInfo,
+                    fingerprint.software?.let { "Product: " + it.displayName + " " + it.version },
+                    fingerprint.software?.let { "CPE: " + it.cpeName },
                     fingerprint.tlsVersion?.let { "TLS: $it" },
                     fingerprint.cipherSuite?.let { "Cipher: $it" },
                     fingerprint.certificateSubject?.let { "Certificate subject: $it" },
@@ -778,6 +862,82 @@ private fun PortResultRow(result: PortScanResult) {
             Spacer(Modifier.width(10.dp))
             Text(
                 "${it} ms",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun VulnerabilityResultCard(finding: VulnerabilityFinding) {
+    val uriHandler = LocalUriHandler.current
+    val severityColor = when (finding.cvssSeverity?.uppercase()) {
+        "CRITICAL", "HIGH" -> MaterialTheme.colorScheme.error
+        "MEDIUM" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { runCatching { uriHandler.openUri(finding.nvdUrl) } },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(finding.cveId, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                Text(
+                    finding.cvssSeverity ?: "UNRATED",
+                    color = severityColor,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                finding.productName + " " + finding.version,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(
+                    finding.cvssScore?.let { "CVSS " + String.format(Locale.ENGLISH, "%.1f", it) } ?: "CVSS N/A",
+                    color = severityColor,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    finding.epssScore?.let { "EPSS " + String.format(Locale.ENGLISH, "%.2f%%", it * 100.0) } ?: "EPSS N/A",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                if (finding.isKnownExploited) {
+                    Text("CISA KEV", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+            Text(
+                finding.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
+            finding.weakness?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            }
+            if (finding.isKnownExploited) {
+                Text(
+                    "Known exploited · Added " + (finding.kevDateAdded ?: "date unavailable"),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                finding.kevRequiredAction?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+            Text(
+                "CPE match from a service banner · verify vendor patch/backport status · tap for NVD",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall
             )

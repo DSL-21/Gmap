@@ -14,8 +14,8 @@ android {
         // Keep targetSdk at 36 until ACCESS_LOCAL_NETWORK runtime permission
         // handling is implemented and tested for Android 17.
         targetSdk = 36
-        versionCode = 5
-        versionName = "2.2.0"
+        versionCode = 6
+        versionName = "2.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

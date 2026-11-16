@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
 import com.dsl.gmap.scanner.engine.ServiceDetector
+import com.dsl.gmap.scanner.engine.VulnerabilityIntelligenceEngine
 import com.dsl.gmap.scanner.model.PortState
 import com.dsl.gmap.scanner.model.ScanSessionSummary
 import com.dsl.gmap.scanner.model.ScanUiState
+import com.dsl.gmap.scanner.model.VulnerabilityAssessment
 import com.dsl.gmap.scanner.validation.PortRangeParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +23,8 @@ import java.net.InetAddress
 
 class ScanViewModel(
     private val scanner: TcpConnectScanner = TcpConnectScanner(),
-    private val serviceDetector: ServiceDetector = ServiceDetector()
+    private val serviceDetector: ServiceDetector = ServiceDetector(),
+    private val vulnerabilityEngine: VulnerabilityIntelligenceEngine = VulnerabilityIntelligenceEngine()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -32,6 +35,9 @@ class ScanViewModel(
 
     private val _timeoutMs = MutableStateFlow(DEFAULT_TIMEOUT_MS)
     val timeoutMs: StateFlow<Int> = _timeoutMs.asStateFlow()
+
+    private val _onlineIntelligenceEnabled = MutableStateFlow(true)
+    val onlineIntelligenceEnabled: StateFlow<Boolean> = _onlineIntelligenceEnabled.asStateFlow()
 
     private var scanJob: Job? = null
 
@@ -48,6 +54,10 @@ class ScanViewModel(
 
     fun setTimeoutMs(value: Int) {
         if (value in ALLOWED_TIMEOUTS_MS) _timeoutMs.value = value
+    }
+
+    fun setOnlineIntelligenceEnabled(value: Boolean) {
+        _onlineIntelligenceEnabled.value = value
     }
 
     fun clearHistory() {
@@ -86,7 +96,7 @@ class ScanViewModel(
                 _uiState.update {
                     it.copy(
                         resolvedAddress = address.hostAddress,
-                        statusMessage = "Scanning ${address.hostAddress}",
+                        statusMessage = "Scanning " + address.hostAddress,
                         total = portRange.size
                     )
                 }
@@ -117,15 +127,14 @@ class ScanViewModel(
                             openPorts = updatedOpenPorts,
                             elapsedMs = progress.elapsedMs,
                             probesPerSecond = progress.probesPerSecond,
-                            statusMessage = "Scanning ${address.hostAddress}"
+                            statusMessage = "Scanning " + address.hostAddress
                         )
                     }
                 }
 
-                val elapsed = System.currentTimeMillis() - startedAt
                 val tcpOpenPorts = results.filter { it.state == PortState.OPEN }
                 _uiState.update {
-                    it.copy(statusMessage = "Identifying services on ${tcpOpenPorts.size} open ports...")
+                    it.copy(statusMessage = "Identifying services on " + tcpOpenPorts.size + " open ports...")
                 }
                 val openPorts = serviceDetector.identify(
                     address = address,
@@ -137,10 +146,48 @@ class ScanViewModel(
                 val closedCount = results.count { it.state == PortState.CLOSED }
                 val filteredCount = results.count { it.state == PortState.FILTERED }
                 val errorCount = results.count { it.state == PortState.ERROR }
+                val softwareIdentities = openPorts.mapNotNull { it.fingerprint?.software }
+                    .distinctBy { it.cpeName }
 
                 _uiState.update {
                     it.copy(
+                        openPorts = openPorts,
+                        softwareIdentities = softwareIdentities,
+                        isAssessing = true,
+                        statusMessage = if (_onlineIntelligenceEnabled.value) {
+                            "Checking public vulnerability intelligence..."
+                        } else {
+                            "Finalizing scan results..."
+                        }
+                    )
+                }
+
+                val assessment = if (_onlineIntelligenceEnabled.value) {
+                    try {
+                        vulnerabilityEngine.assess(softwareIdentities)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (exception: Exception) {
+                        VulnerabilityAssessment(
+                            products = softwareIdentities,
+                            findings = emptyList(),
+                            message = "Vulnerability lookup failed.",
+                            warnings = listOf(exception.message ?: exception.javaClass.simpleName)
+                        )
+                    }
+                } else {
+                    VulnerabilityAssessment(
+                        products = softwareIdentities,
+                        findings = emptyList(),
+                        message = "Online vulnerability lookup is disabled in Settings."
+                    )
+                }
+
+                val elapsed = System.currentTimeMillis() - startedAt
+                _uiState.update {
+                    it.copy(
                         isScanning = false,
+                        isAssessing = false,
                         completed = results.size,
                         total = results.size,
                         progress = 1f,
@@ -149,6 +196,10 @@ class ScanViewModel(
                         filteredCount = filteredCount,
                         errorCount = errorCount,
                         openPorts = openPorts,
+                        softwareIdentities = assessment.products,
+                        vulnerabilityFindings = assessment.findings,
+                        intelligenceMessage = assessment.message,
+                        intelligenceWarnings = assessment.warnings,
                         elapsedMs = elapsed,
                         probesPerSecond = if (elapsed > 0) results.size * 1000.0 / elapsed else 0.0,
                         statusMessage = "Scan completed"
@@ -160,7 +211,7 @@ class ScanViewModel(
                     id = finishedAt,
                     target = target,
                     resolvedAddress = address.hostAddress ?: target,
-                    portRange = "${portRange.start}-${portRange.end}",
+                    portRange = portRange.start.toString() + "-" + portRange.end,
                     totalPorts = results.size,
                     openCount = openCount,
                     closedCount = closedCount,
@@ -168,15 +219,20 @@ class ScanViewModel(
                     errorCount = errorCount,
                     elapsedMs = elapsed,
                     finishedAtEpochMs = finishedAt,
-                    openPorts = openPorts
+                    openPorts = openPorts,
+                    softwareIdentities = assessment.products,
+                    vulnerabilityFindings = assessment.findings,
+                    intelligenceMessage = assessment.message,
+                    intelligenceWarnings = assessment.warnings
                 )
-                // Keep only the latest 20 compact summaries in RAM. Nothing is persisted.
                 _history.update { (listOf(session) + it).take(MAX_HISTORY_ITEMS) }
             } catch (cancelled: CancellationException) {
-                _uiState.update { it.copy(isScanning = false, statusMessage = "Scan cancelled") }
+                _uiState.update {
+                    it.copy(isScanning = false, isAssessing = false, statusMessage = "Scan cancelled")
+                }
                 throw cancelled
             } catch (exception: Exception) {
-                setError("Scan failed: ${exception.message ?: "Unknown error"}")
+                setError("Scan failed: " + (exception.message ?: "Unknown error"))
             }
         }
     }
@@ -187,7 +243,7 @@ class ScanViewModel(
 
     private fun setError(message: String) {
         _uiState.update {
-            it.copy(isScanning = false, statusMessage = message, errorMessage = message)
+            it.copy(isScanning = false, isAssessing = false, statusMessage = message, errorMessage = message)
         }
     }
 

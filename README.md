@@ -4,7 +4,7 @@ Gmap is a native Android network scanner and security-audit toolkit built with K
 
 ## Modules
 
-Gmap 2.2.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.3.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 
 ### Network
@@ -23,6 +23,8 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 - Adaptive probe window, local socket-resource backoff, cancellation and progress metrics.
 - Port states: `OPEN`, `CLOSED`, `FILTERED` and `ERROR`.
 - Read-only service identification for selected SSH, FTP, SMTP, POP3, IMAP, VNC, MySQL, HTTP, TLS, Redis and PostgreSQL services.
+- Conservative product/version fingerprinting when a service exposes an explicit version banner or HTTP server header.
+- CPE 2.3 candidate generation and optional NVD CVE, CISA KEV and FIRST EPSS enrichment.
 
 ### UDP probe scanner
 - Custom UDP ranges up to 512 ports per run.
@@ -39,7 +41,7 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 - Findings include severity, evidence and a remediation suggestion.
 - A Web audit report can be copied explicitly from the Web screen.
 
-The Web module checks response configuration and headers. It is not a web application exploit scanner, does not test authenticated application flows and does not correlate detected software versions with a CVE database.
+The Web module checks response configuration and headers. It is not a web application exploit scanner and does not test authenticated application flows. TCP service identities can be correlated with NVD CVEs, CISA KEV and FIRST EPSS when online intelligence is enabled. These are assessment leads, not proof of exploitability; vendor backports and distribution patches must be verified.
 
 ### Findings
 Host TCP scans, UDP scans and Web audits are grouped in one screen. Recent results stay in application memory only; they are not written to a database, files, preferences or a cloud service.
