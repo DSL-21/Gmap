@@ -93,6 +93,7 @@ fun DashboardScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
     var network by remember { mutableStateOf(com.dsl.gmap.network.ActiveNetworkInspector.inspect(context)) }
     var discoveryJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var discoveredHosts by remember { mutableStateOf<List<com.dsl.gmap.network.DiscoveredHost>>(emptyList()) }
@@ -195,22 +196,29 @@ fun DashboardScreen(
                     if (cidr == null) {
                         discoveryError = "No active IPv4 network."
                     } else {
-                        discoveredHosts = emptyList()
-                        discoveryProgress = 0 to 0
-                        discoveryError = null
-                        discoveryJob = scope.launch {
-                            try {
-                                discoveredHosts = com.dsl.gmap.network.NetworkDiscoveryScanner().scan(cidr) { done, total ->
-                                    discoveryProgress = done to total
+                        requestLocalNetworkPermission(
+                            onGranted = {
+                                discoveredHosts = emptyList()
+                                discoveryProgress = 0 to 0
+                                discoveryError = null
+                                discoveryJob = scope.launch {
+                                    try {
+                                        discoveredHosts = com.dsl.gmap.network.NetworkDiscoveryScanner().scan(cidr) { done, total ->
+                                            discoveryProgress = done to total
+                                        }
+                                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                        throw cancelled
+                                    } catch (exception: Exception) {
+                                        discoveryError = exception.message ?: "Discovery failed."
+                                    } finally {
+                                        discoveryJob = null
+                                    }
                                 }
-                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                throw cancelled
-                            } catch (exception: Exception) {
-                                discoveryError = exception.message ?: "Discovery failed."
-                            } finally {
-                                discoveryJob = null
+                            },
+                            onDenied = {
+                                discoveryError = "Local network access is required to discover devices. Enable it in Android app permissions."
                             }
-                        }
+                        )
                     }
                 }
             },
@@ -259,6 +267,7 @@ fun DashboardScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text(host.address, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(host.likelyRole, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                         Text(host.openPorts.joinToString(" · ") { "${it}/tcp" }.ifBlank { "No detected open ports" }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     Text(
@@ -308,6 +317,8 @@ fun ScanScreen(viewModel: ScanViewModel) {
     var target by remember { mutableStateOf("") }
     var startPort by remember { mutableStateOf("1") }
     var endPort by remember { mutableStateOf("1024") }
+    var permissionError by remember { mutableStateOf<String?>(null) }
+    val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
 
     LaunchedEffect(prefillTarget) {
         if (prefillTarget.isNotBlank()) {
@@ -399,7 +410,18 @@ fun ScanScreen(viewModel: ScanViewModel) {
             }
         } else {
             Button(
-                onClick = { viewModel.startScan(target, startPort, endPort) },
+                onClick = {
+                    val start = { viewModel.startScan(target, startPort, endPort) }
+                    if (LocalNetworkAccess.targetRequiresPermission(target)) {
+                        requestLocalNetworkPermission(
+                            onGranted = { permissionError = null; start() },
+                            onDenied = { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                        )
+                    } else {
+                        permissionError = null
+                        start()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
@@ -453,6 +475,9 @@ fun ScanScreen(viewModel: ScanViewModel) {
         }
 
         state.errorMessage?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+        permissionError?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
 

@@ -44,6 +44,8 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
     var target by remember { mutableStateOf("") }
     var startPort by remember { mutableStateOf("1") }
     var endPort by remember { mutableStateOf("256") }
+    var permissionError by remember { mutableStateOf<String?>(null) }
+    val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -119,7 +121,18 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
             }
         } else {
             Button(
-                onClick = { viewModel.startScan(target, startPort, endPort) },
+                onClick = {
+                    val start = { viewModel.startScan(target, startPort, endPort) }
+                    if (LocalNetworkAccess.targetRequiresPermission(target)) {
+                        requestLocalNetworkPermission(
+                            onGranted = { permissionError = null; start() },
+                            onDenied = { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                        )
+                    } else {
+                        permissionError = null
+                        start()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 enabled = target.isNotBlank(),
                 shape = RoundedCornerShape(14.dp)
@@ -131,6 +144,7 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
         }
 
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        permissionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         if (state.isScanning || state.total > 0) {
             Text(state.statusMessage, fontWeight = FontWeight.SemiBold)
