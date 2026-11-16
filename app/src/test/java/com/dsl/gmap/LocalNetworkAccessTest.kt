@@ -16,6 +16,8 @@ class LocalNetworkAccessTest {
     @Test
     fun detectsLocalNamesAndIpv6LocalAddresses() {
         assertTrue(LocalNetworkAccess.targetRequiresPermission("printer.local"))
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("router"))
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("nas.lan"))
         assertTrue(LocalNetworkAccess.targetRequiresPermission("localhost"))
         assertTrue(LocalNetworkAccess.targetRequiresPermission("fe80::1"))
         assertTrue(LocalNetworkAccess.targetRequiresPermission("fc00::1"))

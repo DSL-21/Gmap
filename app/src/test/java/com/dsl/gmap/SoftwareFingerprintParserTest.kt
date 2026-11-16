@@ -46,6 +46,42 @@ class SoftwareFingerprintParserTest {
     }
 
     @Test
+    fun identifiesPhpVersionFromPoweredByHeader() {
+        val identity = SoftwareFingerprintParser.identify(
+            ServiceFingerprint(service = "HTTP", additionalInfo = "X-Powered-By: PHP/8.2.12")
+        )
+        assertEquals("PHP", identity?.displayName)
+        assertEquals("8.2.12", identity?.version)
+        assertEquals("cpe:2.3:a:php:php:8.2.12:*:*:*:*:*:*:*", identity?.cpeName)
+    }
+
+    @Test
+    fun identifiesTomcatAndJettyVersions() {
+        val tomcat = SoftwareFingerprintParser.identify(
+            ServiceFingerprint(service = "HTTP", serverHeader = "Apache Tomcat/10.1.18")
+        )
+        val jetty = SoftwareFingerprintParser.identify(
+            ServiceFingerprint(service = "HTTP", serverHeader = "Jetty(12.0.6)")
+        )
+        assertEquals("Apache Tomcat", tomcat?.displayName)
+        assertEquals("10.1.18", tomcat?.version)
+        assertEquals("Eclipse Jetty", jetty?.displayName)
+        assertEquals("12.0.6", jetty?.version)
+    }
+
+    @Test
+    fun identifiesPythonAppServers() {
+        val gunicorn = SoftwareFingerprintParser.identify(
+            ServiceFingerprint(service = "HTTP", serverHeader = "gunicorn/21.2.0")
+        )
+        val uvicorn = SoftwareFingerprintParser.identify(
+            ServiceFingerprint(service = "HTTP", serverHeader = "uvicorn/0.27.1")
+        )
+        assertEquals("Gunicorn", gunicorn?.displayName)
+        assertEquals("Uvicorn", uvicorn?.displayName)
+    }
+
+    @Test
     fun doesNotInventVersionWhenOnlyProductNameIsVisible() {
         val identity = SoftwareFingerprintParser.identify(
             ServiceFingerprint(service = "HTTP", serverHeader = "Apache")

@@ -78,9 +78,11 @@ class ServiceDetector(
             val identified = when (result.port) {
                 22 -> identifyGreeting(address, result, timeoutMs, "SSH")
                 21 -> identifyGreeting(address, result, timeoutMs, "FTP")
-                25 -> identifyGreeting(address, result, timeoutMs, "SMTP")
+                23 -> identifyGreeting(address, result, timeoutMs, "Telnet")
+                25, 587 -> identifyGreeting(address, result, timeoutMs, "SMTP")
                 110 -> identifyGreeting(address, result, timeoutMs, "POP3")
                 143 -> identifyGreeting(address, result, timeoutMs, "IMAP")
+                465, 990, 993, 995 -> identifyTls(address, originalTarget, result, timeoutMs)
                 5900 -> identifyVnc(address, result, timeoutMs)
                 in smbPorts -> identifySmb(address, result, timeoutMs)
                 in rdpPorts -> identifyRdp(address, result, timeoutMs)
@@ -89,7 +91,9 @@ class ServiceDetector(
                 in tlsPorts -> identifyTls(address, originalTarget, result, timeoutMs)
                 5432 -> identifyPostgres(address, result, timeoutMs)
                 6379 -> identifyRedis(address, result, timeoutMs)
-                else -> result
+                else -> result.copy(
+                    serviceHint = result.serviceHint ?: WELL_KNOWN_TCP_SERVICES[result.port]
+                )
             }
             val fingerprint = identified.fingerprint
             if (fingerprint == null) identified
@@ -586,7 +590,29 @@ class ServiceDetector(
     companion object {
         const val DEFAULT_WORKERS = 8
         private val DEFAULT_HTTP_PORTS = setOf(80, 81, 3000, 5000, 8000, 8008, 8080, 8081, 8880, 8888, 9000)
-        private val DEFAULT_TLS_PORTS = setOf(443, 465, 5001, 6443, 8443, 9443, 10443)
+        private val DEFAULT_TLS_PORTS = setOf(443, 465, 990, 993, 995, 5001, 6443, 8443, 9443, 10443)
+        private val WELL_KNOWN_TCP_SERVICES = mapOf(
+            20 to "FTP data", 21 to "FTP", 22 to "SSH", 23 to "Telnet",
+            25 to "SMTP", 53 to "DNS", 80 to "HTTP", 88 to "Kerberos",
+            110 to "POP3", 111 to "RPCbind", 135 to "MS RPC", 139 to "NetBIOS",
+            143 to "IMAP", 179 to "BGP", 389 to "LDAP", 443 to "HTTPS",
+            445 to "SMB", 465 to "SMTPS", 500 to "IPsec/IKE", 515 to "LPD",
+            548 to "AFP", 554 to "RTSP", 587 to "SMTP submission", 631 to "IPP",
+            636 to "LDAPS", 873 to "rsync", 902 to "VMware", 990 to "FTPS",
+            993 to "IMAPS", 995 to "POP3S", 1080 to "SOCKS proxy", 1194 to "OpenVPN",
+            1433 to "Microsoft SQL Server", 1521 to "Oracle DB", 1723 to "PPTP",
+            1883 to "MQTT", 1900 to "SSDP", 2049 to "NFS", 2375 to "Docker API",
+            2376 to "Docker API TLS", 3000 to "HTTP application", 3306 to "MySQL",
+            3389 to "RDP", 3478 to "STUN", 3690 to "Subversion", 5000 to "HTTP/API",
+            5001 to "HTTPS/API", 5060 to "SIP", 5432 to "PostgreSQL", 5672 to "AMQP",
+            5900 to "VNC", 5985 to "WinRM", 5986 to "WinRM HTTPS", 6379 to "Redis",
+            6443 to "Kubernetes API", 6667 to "IRC", 7001 to "WebLogic",
+            8000 to "HTTP alternate", 8008 to "HTTP alternate", 8080 to "HTTP proxy",
+            8081 to "HTTP alternate", 8443 to "HTTPS alternate", 8888 to "HTTP alternate",
+            9000 to "HTTP/application", 9042 to "Cassandra", 9092 to "Kafka",
+            9200 to "Elasticsearch", 9300 to "Elasticsearch transport", 9418 to "Git",
+            10000 to "Webmin", 11211 to "Memcached", 27017 to "MongoDB"
+        )
         private val DEFAULT_SMB_PORTS = setOf(445)
         private val DEFAULT_RDP_PORTS = setOf(3389)
         private const val NETBIOS_HEADER_BYTES = 4

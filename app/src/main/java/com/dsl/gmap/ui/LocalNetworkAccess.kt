@@ -25,7 +25,11 @@ object LocalNetworkAccess {
     fun targetRequiresPermission(target: String): Boolean {
         val value = target.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
         if (value.equals("localhost", ignoreCase = true) ||
-            value.endsWith(".local", ignoreCase = true)
+            value.endsWith(".local", ignoreCase = true) ||
+            value.endsWith(".lan", ignoreCase = true) ||
+            value.endsWith(".home", ignoreCase = true) ||
+            value.endsWith(".internal", ignoreCase = true) ||
+            (!value.contains('.') && !value.contains(':'))
         ) return true
 
         val ipv4Literal = IPV4_PATTERN.matches(value)
