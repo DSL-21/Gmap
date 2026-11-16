@@ -1,4 +1,4 @@
-name: Publish Gmap 2.4.0 Release
+name: Publish Gmap 2.5.0 Security Release
 
 on:
   push:
@@ -9,26 +9,26 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-4-0
+  group: publish-gmap-2-5-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.4.0
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.4.0')
+    name: Build, test and publish Gmap 2.5.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.5.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
           packages: platform-tools
 
@@ -42,59 +42,64 @@ jobs:
           fi
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
-      - name: Run unit tests and assemble APK
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: Run Android Lint, unit tests and assemble APK
+        run: ./gradlew --no-daemon lintDebug testDebugUnitTest assembleDebug
 
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.4.0.apk
-          (cd release-assets && sha256sum gmap-2.4.0.apk > gmap-2.4.0.apk.sha256)
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.5.0.apk
+          (cd release-assets && sha256sum gmap-2.5.0.apk > gmap-2.5.0.apk.sha256)
           cat > release-assets/release-notes.md <<'EOF'
-          ## Gmap 2.4.0
-          
-          ### What's new
-          - Android 17/API 37 target with runtime local-network permission for LAN scans and local Web targets.
-          - Parallel local network discovery with 27 common TCP probes and likely device-role labels.
-          - Expanded read-only service fingerprints for SMB2 and RDP negotiation, plus broader HTTP/TLS port coverage.
-          - CPE 2.3 fingerprints for additional web stacks including PHP, Tomcat, Jetty, OpenResty, Gunicorn, Uvicorn, Werkzeug, HAProxy and Traefik.
-          - Expanded Web audit: HEAD fallback, same-host redirects, CORS, modern security headers, TLS SANs and public endpoint checks.
-          - Explicit user-initiated HTTP auditing, with a clear UI warning that HTTP traffic is unencrypted.
-          - Optional Web server CPE/CVE correlation with NVD, CISA KEV and FIRST EPSS.
-          - Improved UI for public endpoint status, identified software, CVE/KEV/EPSS and remediation evidence.
-          - Recent results remain RAM-only; no report exports, clipboard export, database or cloud sync.
-          
-          ### Download
-          Download **gmap-2.4.0.apk** for Android 8.0 (API 26) or later.
-          
-          ### Build and scope
-          This is a CI debug-signed APK for direct device testing, not a production-keystore or Google Play package. A SHA-256 checksum is included. Local discovery uses TCP presence probes rather than ARP. UDP silence is reported as OPEN|FILTERED. Web audit is a read-only configuration and public-metadata audit, not an exploit scanner. HTTP checks are unauthenticated and unencrypted; never enter credentials or sensitive URL parameters. Gmap does not claim raw TCP SYN, raw ICMP crafting, Wi-Fi monitor mode or packet injection. The app targets Android SDK 37 and requests ACCESS_LOCAL_NETWORK for local network operations.
+          ## Gmap 2.5.0 — Security hardening release
+
+          ### Security changes
+          - Hard cap of 128 concurrent TCP connection probes to protect mobile device resources.
+          - Web audit redacts Set-Cookie values and omits URL query parameters from requests and results.
+          - Web redirects cannot pivot to another port or downgrade HTTPS; a same-host HTTP-to-default-HTTPS upgrade is allowed.
+          - Bounded response header metadata and disabled automatic redirects for public vulnerability intelligence requests.
+          - Added regression tests for the security-sensitive behaviour.
+
+          ### Repository and CI
+          - Removed tracked IDE state, Kotlin error logs and an unused legacy layout.
+          - GitHub Actions pinned to immutable commit SHAs.
+          - Android Lint added to CI; redundant CI APK artifacts removed.
+          - Dependabot enabled for Gradle and GitHub Actions dependencies.
+
+          ### Security scope and limitations
+          Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. The Web audit still uses the platform URL connection stack and does not pin DNS answers to sockets; DNS rebinding remains a documented limitation when a user manually audits an untrusted hostname. HTTP auditing remains available and is unencrypted. Never enter credentials or sensitive URL parameters. This APK is CI debug-signed, not a production or Play Store package.
           EOF
 
-      - name: Create or update GitHub Release and upload APK
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v2.5.0
         run: |
-          if gh release view v2.4.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            # Replace the preliminary release created by an earlier successful build.
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/v2.4.0" -f sha="$GITHUB_SHA" -F force=true
-            gh release upload v2.4.0 \
-              release-assets/gmap-2.4.0.apk \
-              release-assets/gmap-2.4.0.apk.sha256 \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber
-            gh release edit v2.4.0 \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Gmap 2.4.0" \
-              --notes-file release-assets/release-notes.md
-          else
-            gh release create v2.4.0 \
-              release-assets/gmap-2.4.0.apk \
-              release-assets/gmap-2.4.0.apk.sha256 \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "Gmap 2.4.0" \
-              --notes-file release-assets/release-notes.md
-          fi
+          gh release create "$RELEASE_TAG" \
+            release-assets/gmap-2.5.0.apk \
+            release-assets/gmap-2.5.0.apk.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Gmap 2.5.0 — Security hardening" \
+            --notes-file release-assets/release-notes.md
+
+      - name: Remove superseded releases and tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v2.5.0
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' |
+          while IFS= read -r old_tag; do
+            [ "$old_tag" = "$RELEASE_TAG" ] && continue
+            gh release delete "$old_tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          done
+
+          gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].name' |
+          while IFS= read -r old_tag; do
+            [ "$old_tag" = "$RELEASE_TAG" ] && continue
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$old_tag" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$old_tag"
+            fi
+          done

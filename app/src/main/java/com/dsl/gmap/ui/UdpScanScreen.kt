@@ -105,6 +105,12 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
         ) { Text("Extended · 512 ports") }
 
         Text(
+            "Only scan systems you own or are explicitly authorized to test.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        Text(
             "No UDP response is inconclusive. Gmap reports silent ports as OPEN|FILTERED, not CLOSED.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall

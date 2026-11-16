@@ -13,6 +13,13 @@ import java.util.concurrent.atomic.AtomicInteger
 class TcpConnectScannerTest {
 
     @Test
+    fun scannerHasStrictMobileConcurrencyCeiling() {
+        assertTrue(TcpConnectScanner.MAX_CONCURRENT_PROBES <= 128)
+        assertTrue(TcpConnectScanner.MAX_CONCURRENT_PROBES > 0)
+    }
+
+
+    @Test
     fun detectsListeningTcpPort() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val progressCallbacks = AtomicInteger(0)

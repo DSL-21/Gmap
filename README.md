@@ -1,10 +1,16 @@
-# Gmap 2.4.0 — Rootless Android Network Scanner
+# Gmap 2.5.0 — Rootless Android Network Scanner
 
 Gmap is a native Android network scanner and security-audit toolkit built with Kotlin, Jetpack Compose and standard Android networking APIs. It runs without root or a companion computer.
 
+## Security and responsible use
+
+Gmap is an explicitly user-operated, read-only network inspection tool. Use it only on devices and networks you own or have permission to assess. TCP concurrency is hard-capped to 128 outstanding probes, local discovery and UDP probing have independent limits, and the Web audit bounds response metadata, redacts cookie values, omits URL query strings and refuses unsafe cross-origin, cross-port or HTTPS-downgrade redirects.
+
+The Web audit supports explicitly entered HTTP URLs for compatibility testing. HTTP is plaintext; do not include credentials or sensitive information in target URLs. See [SECURITY.md](SECURITY.md) and [the security audit](docs/SECURITY_AUDIT.md) for scope and known limitations.
+
 ## Modules
 
-Gmap 2.4.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.5.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 ### Network discovery
 

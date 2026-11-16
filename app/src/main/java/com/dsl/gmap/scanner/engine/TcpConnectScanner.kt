@@ -58,9 +58,10 @@ class TcpConnectScanner {
 
         // There is no fixed 48/128 worker cap. The window can grow to the
         // requested scan size and backs off only when the OS reports pressure.
+        // Hard ceiling protects mobile sockets, descriptors, battery and radio use.
         var window = minOf(
             total,
-            maxOf(256, Runtime.getRuntime().availableProcessors() * 128)
+            maxOf(16, minOf(MAX_CONCURRENT_PROBES, Runtime.getRuntime().availableProcessors() * 16))
         )
         var resourceBackoffUntil = 0L
         var completedSinceGrowth = 0
@@ -100,7 +101,7 @@ class TcpConnectScanner {
             if (completedSinceGrowth >= 128) {
                 if (resourceCooldown == 0 && window < total) {
                     val increase = maxOf(64, window / 2)
-                    window = minOf(total, window + increase)
+                    window = minOf(total, MAX_CONCURRENT_PROBES, window + increase)
                 }
                 completedSinceGrowth = 0
             }
@@ -364,4 +365,7 @@ class TcpConnectScanner {
         val deadlineNanos: Long,
         var completed: Boolean = false
     )
+    companion object {
+        const val MAX_CONCURRENT_PROBES = 128
+    }
 }

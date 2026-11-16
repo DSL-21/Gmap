@@ -68,6 +68,11 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
             placeholder = { Text("example.com") },
             singleLine = true
         )
+        Text(
+            "Only audit systems you own or have explicit permission to test. Query parameters are omitted and cookie values are redacted in results.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
         if (target.trim().startsWith("http://", ignoreCase = true)) {
             Text(
                 "HTTP is unencrypted. Gmap sends unauthenticated, read-only audit requests only. Do not enter credentials or sensitive URL parameters.",

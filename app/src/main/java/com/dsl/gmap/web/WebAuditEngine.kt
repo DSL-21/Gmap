@@ -65,11 +65,21 @@ class WebAuditEngine {
         var redirects = 0
 
         while (response.status in REDIRECT_CODES && redirects < MAX_REDIRECTS) {
+            // Never follow cross-host redirects, HTTPS downgrades or arbitrary port pivots.
+            // A same-host HTTP -> default HTTPS upgrade is permitted.
             val location = response.headers.header("Location") ?: break
             val next = runCatching { currentUri.resolve(location).normalize() }.getOrNull() ?: break
-            if (next.scheme?.lowercase(Locale.ROOT) !in setOf("http", "https") ||
-                !next.host.equals(originalHost, ignoreCase = true) ||
-                next.userInfo != null
+            val currentScheme = currentUri.scheme.lowercase(Locale.ROOT)
+            val nextScheme = next.scheme?.lowercase(Locale.ROOT)
+            val sameHost = next.host.equals(originalHost, ignoreCase = true)
+            val currentPort = effectivePort(currentUri)
+            val nextPort = effectivePort(next)
+            val safeHttpsUpgrade = currentScheme == "http" && nextScheme == "https" && nextPort == 443
+            if (nextScheme !in setOf("http", "https") ||
+                !sameHost ||
+                next.userInfo != null ||
+                (currentScheme == "https" && nextScheme != "https") ||
+                (!safeHttpsUpgrade && currentPort != nextPort)
             ) break
 
             currentUri = next
@@ -89,7 +99,7 @@ class WebAuditEngine {
         )
 
         WebAuditResult(
-            url = initialUri.toString(),
+            url = displayUri(initialUri),
             host = originalHost,
             resolvedAddresses = addresses,
             httpStatus = response.status,
@@ -100,8 +110,8 @@ class WebAuditEngine {
             certificateExpiryEpochMs = response.tls?.expiry,
             redirectLocation = response.headers.header("Location"),
             findings = findings,
-            finalUrl = currentUri.toString(),
-            redirectChain = redirectChain,
+            finalUrl = displayUri(currentUri),
+            redirectChain = redirectChain.map { displayUri(URI(it)) },
             certificateSans = response.tls?.sans.orEmpty(),
             usedGetFallback = usedGetFallback,
             resources = resources
@@ -137,10 +147,12 @@ class WebAuditEngine {
 
         try {
             val status = connection.responseCode
-            val headers = connection.headerFields
-                .filterKeys { it != null }
-                .mapKeys { requireNotNull(it.key) }
-                .mapValues { (_, values) -> values.filterNotNull() }
+            val headers = sanitizeHeaders(
+                connection.headerFields
+                    .filterKeys { it != null }
+                    .mapKeys { requireNotNull(it.key) }
+                    .mapValues { (_, values) -> values.filterNotNull() }
+            )
 
             val tls = (connection as? HttpsURLConnection)?.let { https ->
                 val certificate = runCatching {
@@ -206,6 +218,7 @@ class WebAuditEngine {
     private fun normalize(input: String): URI {
         val raw = input.trim()
         require(raw.isNotEmpty()) { "Enter a hostname or URL." }
+        require(raw.length <= MAX_URL_LENGTH) { "The URL is too long (maximum " + MAX_URL_LENGTH + " characters)." }
         val candidate = if (raw.contains("://")) raw else "https://$raw"
         val uri = runCatching { URI(candidate) }
             .getOrElse { throw IllegalArgumentException("Enter a valid hostname or URL.") }
@@ -226,9 +239,51 @@ class WebAuditEngine {
             uri.host,
             uri.port,
             uri.rawPath?.takeIf { it.isNotEmpty() } ?: "/",
-            uri.rawQuery,
+            null, // Query strings can carry session tokens and are not required for this audit.
             null
         )
+    }
+
+    private fun effectivePort(uri: URI): Int =
+        if (uri.port != -1) uri.port else if (uri.scheme.equals("https", true)) 443 else 80
+
+    private fun displayUri(uri: URI): String =
+        uri.toASCIIString().substringBefore('?').substringBefore('#')
+
+    /** Retain bounded, sanitized response metadata from an untrusted server. */
+    private fun sanitizeHeaders(input: Map<String, List<String>>): Map<String, List<String>> {
+        val safe = LinkedHashMap<String, List<String>>()
+        input.entries.take(MAX_RESPONSE_HEADERS).forEach { (name, values) ->
+            val safeName = name.take(MAX_HEADER_NAME_CHARS)
+            val safeValues = values.take(MAX_VALUES_PER_HEADER).mapNotNull { rawValue ->
+                when {
+                    name.equals("Set-Cookie", ignoreCase = true) -> redactSetCookie(rawValue)
+                    name.equals("Location", ignoreCase = true) -> sanitizeLocation(rawValue)
+                    else -> rawValue.take(MAX_HEADER_VALUE_CHARS)
+                }
+            }
+            if (safeValues.isNotEmpty()) safe[safeName] = safeValues
+        }
+        return safe
+    }
+
+    private fun redactSetCookie(value: String): String {
+        val pair = value.substringBefore(';')
+        val name = pair.substringBefore('=', "").trim().take(128)
+        val attributes = value.substringAfter(';', "")
+            .split(';')
+            .map { it.trim().take(128) }
+            .filter { it.isNotEmpty() }
+        val redactedPair = if (name.isNotBlank()) "$name=<redacted>" else "<redacted>"
+        return (listOf(redactedPair) + attributes).joinToString("; ").take(MAX_HEADER_VALUE_CHARS)
+    }
+
+    private fun sanitizeLocation(value: String): String? {
+        val parsed = runCatching { URI(value) }.getOrNull() ?: return null
+        if (parsed.userInfo != null) return null
+        return value.substringBefore('#').substringBefore('?')
+            .take(MAX_HEADER_VALUE_CHARS)
+            .takeIf { it.isNotBlank() }
     }
 
     private fun buildFindings(
@@ -482,7 +537,12 @@ class WebAuditEngine {
 
     companion object {
         const val TEST_ORIGIN = "https://gmap.invalid"
-        private const val USER_AGENT = "Gmap-Android/2.4"
+        private const val USER_AGENT = "Gmap-Android/2.5"
+        private const val MAX_URL_LENGTH = 2048
+        private const val MAX_RESPONSE_HEADERS = 64
+        private const val MAX_VALUES_PER_HEADER = 8
+        private const val MAX_HEADER_NAME_CHARS = 128
+        private const val MAX_HEADER_VALUE_CHARS = 1024
         private const val CONNECT_TIMEOUT_MS = 4000
         private const val READ_TIMEOUT_MS = 4000
         private const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000

@@ -351,6 +351,11 @@ fun ScanScreen(viewModel: ScanViewModel) {
             enabled = !state.isScanning
         )
         Text(
+            "Only scan systems you own or are explicitly authorized to test.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
             "Use Network to discover hosts on the active local IPv4 subnet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -11,6 +11,67 @@ import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
 
 class WebAuditEngineTest {
+
+    @Test
+    fun redactsCookieValuesAndDropsQueryParameters() = runBlocking {
+        val secret = "SUPER_SECRET_SESSION_TOKEN"
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val worker = Thread {
+                repeat(5) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        val request = readRequest(socket.getInputStream())
+                        requests += request
+                        respond(socket, 200, listOf("Set-Cookie: session=$secret; Path=/; Secure; HttpOnly; SameSite=Lax"))
+                    }
+                }
+            }
+            worker.start()
+            val result = WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/path?token=$secret")
+            worker.join(4000)
+            assertTrue(requests.isNotEmpty())
+            assertTrue(requests.first().contains(" /path HTTP/"))
+            assertTrue(requests.none { it.contains(secret) })
+            assertTrue(!result.url.contains(secret))
+            assertTrue(!result.finalUrl.contains(secret))
+            assertTrue(result.responseHeaders.values.flatten().none { it.contains(secret) })
+            assertTrue(result.findings.none { it.evidence.contains(secret) })
+            assertTrue(result.responseHeaders.entries
+                .filter { it.key.equals("Set-Cookie", ignoreCase = true) }
+                .flatMap { it.value }
+                .any { it.contains("<redacted>") && it.contains("HttpOnly") })
+        }
+    }
+
+    @Test
+    fun doesNotFollowSameHostRedirectToAnotherPort() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { redirectTarget ->
+            ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { origin ->
+                val worker = Thread {
+                    repeat(5) { index ->
+                        origin.accept().use { socket ->
+                            socket.soTimeout = 3000
+                            readRequest(socket.getInputStream())
+                            if (index == 0) {
+                                respond(socket, 302, listOf("Location: http://127.0.0.1:${redirectTarget.localPort}/next"))
+                            } else {
+                                respond(socket, 404, emptyList())
+                            }
+                        }
+                    }
+                }
+                worker.start()
+                val result = WebAuditEngine().scan("http://127.0.0.1:${origin.localPort}/start")
+                worker.join(4000)
+                assertEquals(1, result.redirectChain.size)
+                redirectTarget.soTimeout = 150
+                val followed = runCatching { redirectTarget.accept() }.isSuccess
+                assertTrue("Web audit followed a redirect to a different port", !followed)
+            }
+        }
+    }
+
     @Test
     fun checksHttpHeadersAndResourcePathsWithoutDownloadingPageBody() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
