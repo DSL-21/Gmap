@@ -25,6 +25,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -43,6 +46,8 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
     val isScanning = state.isScanning || state.isAssessing
     val result = state.result
     val uriHandler = LocalUriHandler.current
+    var permissionError by remember { mutableStateOf<String?>(null) }
+    val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -65,7 +70,18 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
             singleLine = true
         )
         Button(
-            onClick = viewModel::startAudit,
+            onClick = {
+                val start = { viewModel.startAudit() }
+                if (LocalNetworkAccess.targetRequiresPermission(target)) {
+                    requestLocalNetworkPermission(
+                        { permissionError = null; start() },
+                        { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                    )
+                } else {
+                    permissionError = null
+                    start()
+                }
+            },
             enabled = target.isNotBlank() && !isScanning,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(14.dp)
@@ -80,6 +96,7 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
             Text(state.statusMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        permissionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         result?.let { audit ->
             Card(
