@@ -197,7 +197,7 @@ fun DashboardScreen(
                         discoveryError = "No active IPv4 network."
                     } else {
                         requestLocalNetworkPermission(
-                            onGranted = {
+                            {
                                 discoveredHosts = emptyList()
                                 discoveryProgress = 0 to 0
                                 discoveryError = null
@@ -215,7 +215,7 @@ fun DashboardScreen(
                                     }
                                 }
                             },
-                            onDenied = {
+                            {
                                 discoveryError = "Local network access is required to discover devices. Enable it in Android app permissions."
                             }
                         )
@@ -414,8 +414,8 @@ fun ScanScreen(viewModel: ScanViewModel) {
                     val start = { viewModel.startScan(target, startPort, endPort) }
                     if (LocalNetworkAccess.targetRequiresPermission(target)) {
                         requestLocalNetworkPermission(
-                            onGranted = { permissionError = null; start() },
-                            onDenied = { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                            { permissionError = null; start() },
+                            { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
                         )
                     } else {
                         permissionError = null

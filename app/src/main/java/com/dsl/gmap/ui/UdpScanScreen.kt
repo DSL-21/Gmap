@@ -125,8 +125,8 @@ fun UdpScanScreen(viewModel: UdpScanViewModel) {
                     val start = { viewModel.startScan(target, startPort, endPort) }
                     if (LocalNetworkAccess.targetRequiresPermission(target)) {
                         requestLocalNetworkPermission(
-                            onGranted = { permissionError = null; start() },
-                            onDenied = { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                            { permissionError = null; start() },
+                            { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
                         )
                     } else {
                         permissionError = null
