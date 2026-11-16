@@ -4,6 +4,9 @@ Gmap is a native Android network scanner and security-audit toolkit built with K
 
 ## Modules
 
+Gmap 2.2.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+
+
 ### Network
 - Active connection type, interface, IPv4/IPv6 addresses, default gateway and DNS servers.
 - Local IPv4 discovery for subnets from /22 through /30.
