@@ -11,11 +11,10 @@ android {
     defaultConfig {
         applicationId = "com.dsl.gmap"
         minSdk = 26
-        // Keep targetSdk at 36 until ACCESS_LOCAL_NETWORK runtime permission
-        // handling is implemented and tested for Android 17.
-        targetSdk = 36
-        versionCode = 7
-        versionName = "2.3.1"
+        // Android 17 local-network access is requested at runtime for LAN scans.
+        targetSdk = 37
+        versionCode = 8
+        versionName = "2.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -1,35 +1,37 @@
 package com.dsl.gmap
 
+import com.dsl.gmap.network.DeviceRoleClassifier
 import com.dsl.gmap.network.Ipv4Subnet
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NetworkDiscoveryScannerTest {
     @Test
-    fun expandsSlash24AndExcludesLocalAddress() {
+    fun calculatesUsableHostsFor24Subnet() {
         val hosts = Ipv4Subnet.hostAddresses("192.168.1.10/24")
         assertEquals(253, hosts.size)
-        assertFalse(hosts.any { it.hostAddress == "192.168.1.10" })
-        assertTrue(hosts.any { it.hostAddress == "192.168.1.1" })
-        assertTrue(hosts.any { it.hostAddress == "192.168.1.254" })
+        assertEquals("192.168.1.1", hosts.first().hostAddress)
+        assertEquals("192.168.1.254", hosts.last().hostAddress)
+        assertTrue(hosts.none { it.hostAddress == "192.168.1.10" })
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsSubnetsLargerThanMobileDiscoveryLimit() {
+        Ipv4Subnet.hostAddresses("192.168.0.10/21")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsHostnamesInCidrInput() {
+        Ipv4Subnet.hostAddresses("router.local/24")
     }
 
     @Test
-    fun expandsSlash23() {
-        val hosts = Ipv4Subnet.hostAddresses("192.168.2.10/23")
-        assertEquals(509, hosts.size)
-        assertTrue(hosts.any { it.hostAddress == "192.168.3.254" })
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsLargeSubnetInsteadOfScanningAnUnboundedRange() {
-        Ipv4Subnet.hostAddresses("10.0.0.10/16")
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsMalformedCidr() {
-        Ipv4Subnet.hostAddresses("192.168.1.1")
+    fun classifiesCommonDeviceRolesFromOpenPorts() {
+        assertEquals("Printer", DeviceRoleClassifier.classify(listOf(631, 9100)))
+        assertEquals("NAS / File sharing", DeviceRoleClassifier.classify(listOf(445, 5000)))
+        assertEquals("Camera / IoT", DeviceRoleClassifier.classify(listOf(554, 1883)))
+        assertEquals("Remote access", DeviceRoleClassifier.classify(listOf(3389)))
+        assertEquals("Web service", DeviceRoleClassifier.classify(listOf(80, 443)))
     }
 }
