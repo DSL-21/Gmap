@@ -1,7 +1,8 @@
+package com.dsl.gmap.ui
+
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Search
-package com.dsl.gmap.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
