@@ -27,7 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
 
 private enum class AppTab(val label: String, val icon: ImageVector) {
-    DASHBOARD("Home", Icons.Default.Dashboard),
+    DASHBOARD("Network", Icons.Default.Dashboard),
     SCAN("Scan", Icons.Default.Search),
     HISTORY("History", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings)

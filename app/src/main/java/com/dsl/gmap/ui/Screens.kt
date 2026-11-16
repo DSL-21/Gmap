@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -57,81 +56,78 @@ import java.util.Locale
 fun DashboardScreen(
     onStartScan: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var network by remember { mutableStateOf(com.dsl.gmap.network.ActiveNetworkInspector.inspect(context)) }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            "NETWORK INTELLIGENCE",
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
-        Text("Explore your network.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "A practical network assessment toolkit, built to run directly on Android.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = RoundedCornerShape(22.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Text(
+                "NETWORK",
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp
+            )
+            androidx.compose.material3.IconButton(
+                onClick = { network = com.dsl.gmap.network.ActiveNetworkInspector.inspect(context) }
             ) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                ) {
-                    Icon(
-                        Icons.Default.Security,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(12.dp).size(26.dp)
-                    )
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("ROOTLESS BY DESIGN", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "No root access required. Uses standard Android networking APIs.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
+                    contentDescription = "Refresh network information"
+                )
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MetricCard(Modifier.weight(1f), "TCP", "SCAN METHOD")
-            MetricCard(Modifier.weight(1f), "RAM", "SESSION DATA")
-            MetricCard(Modifier.weight(1f), "0", "ROOT REQUIRED")
-        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+
+        NetworkInfoRow("Connection", network.connectionType)
+        NetworkInfoRow("Interface", network.interfaceName ?: "—")
+        NetworkInfoRow(
+            "IP address",
+            network.addresses.ifEmpty { listOf("—") }.joinToString("\n")
+        )
+        NetworkInfoRow("Gateway", network.gateway ?: "—")
+        NetworkInfoRow(
+            "DNS",
+            network.dnsServers.ifEmpty { listOf("—") }.joinToString("\n")
+        )
+
+        Spacer(Modifier.height(8.dp))
 
         Button(
             onClick = onStartScan,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp)
+            modifier = Modifier.fillMaxWidth().height(54.dp),
+            shape = RoundedCornerShape(14.dp)
         ) {
             Icon(Icons.Default.PlayArrow, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Start a scan", fontWeight = FontWeight.Bold)
+            Text("Scan host", fontWeight = FontWeight.Bold)
         }
+    }
+}
 
+@Composable
+private fun NetworkInfoRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "CORE CAPABILITIES",
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelLarge,
+            label.uppercase(Locale.ENGLISH),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 1.5.sp
+            letterSpacing = 0.8.sp
         )
-        FeatureRow(Icons.Default.Radar, "TCP port scanning", "Non-blocking TCP Connect scanning with adaptive socket scheduling.")
-        FeatureRow(Icons.Default.CheckCircle, "Service identification", "Read-only protocol greetings, HTTP headers, and TLS certificate details where supported.")
-        FeatureRow(Icons.Default.Info, "Live scan metrics", "Progress, response timing, throughput, and explicit result states.")
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
