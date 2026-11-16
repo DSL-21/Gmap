@@ -587,6 +587,8 @@ class ServiceDetector(
         const val DEFAULT_WORKERS = 8
         private val DEFAULT_HTTP_PORTS = setOf(80, 81, 3000, 5000, 8000, 8008, 8080, 8081, 8880, 8888, 9000)
         private val DEFAULT_TLS_PORTS = setOf(443, 465, 5001, 6443, 8443, 9443, 10443)
+        private val DEFAULT_SMB_PORTS = setOf(445)
+        private val DEFAULT_RDP_PORTS = setOf(3389)
         private const val NETBIOS_HEADER_BYTES = 4
         private const val SMB2_HEADER_BYTES = 64
         private const val SMB2_NEGOTIATE_FIXED_BYTES = 36

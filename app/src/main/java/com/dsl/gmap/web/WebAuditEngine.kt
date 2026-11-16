@@ -253,7 +253,7 @@ class WebAuditEngine {
                 "Enable HSTS after confirming that all required site paths support HTTPS."
             )
         } else if (https && hsts != null) {
-            val maxAge = Regex("""max-age=($d+)""", RegexOption.IGNORE_CASE)
+            val maxAge = Regex("""max-age=(\d+)""", RegexOption.IGNORE_CASE)
                 .find(hsts)?.groupValues?.getOrNull(1)?.toLongOrNull()
             if (maxAge != null && maxAge < ONE_YEAR_SECONDS) {
                 findings += WebFinding(
@@ -450,16 +450,6 @@ class WebAuditEngine {
         }
 
         return findings.distinctBy { it.title to it.evidence }
-    }
-
-    private fun readBodySample(connection: HttpURLConnection): String {
-        val stream = runCatching { connection.inputStream }
-            .getOrElse { connection.errorStream } ?: return ""
-        return stream.use { input ->
-            val bytes = ByteArray(MAX_BODY_SAMPLE_BYTES)
-            val count = runCatching { input.read(bytes) }.getOrDefault(-1)
-            if (count <= 0) "" else String(bytes, 0, count, Charsets.UTF_8)
-        }
     }
 
     private fun Map<String, List<String>>.headerValues(name: String): List<String> =
