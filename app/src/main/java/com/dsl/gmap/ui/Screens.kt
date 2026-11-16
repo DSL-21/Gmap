@@ -75,13 +75,10 @@ fun DashboardScreen(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp
             )
-            androidx.compose.material3.IconButton(
+            OutlinedButton(
                 onClick = { network = com.dsl.gmap.network.ActiveNetworkInspector.inspect(context) }
             ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
-                    contentDescription = "Refresh network information"
-                )
+                Text("Refresh")
             }
         }
 
