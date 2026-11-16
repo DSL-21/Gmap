@@ -126,14 +126,17 @@ class WebAuditEngine {
         val findings = mutableListOf<WebFinding>()
         val https = uri.scheme.equals("https", ignoreCase = true)
 
-        if (!https) {
+        val redirectsToHttps = status in 300..399 &&
+            headers.header("Location")?.startsWith("https://", ignoreCase = true) == true
+
+        if (!https && !redirectsToHttps) {
             findings += WebFinding(
                 FindingSeverity.MEDIUM,
                 "HTTP without TLS",
-                "The target responded over plain HTTP.",
+                "The target responded over plain HTTP without an HTTPS redirect.",
                 "Serve the site over HTTPS and redirect HTTP requests to the HTTPS endpoint."
             )
-        } else if (headers.header("Strict-Transport-Security").isNullOrBlank()) {
+        } else if (https && headers.header("Strict-Transport-Security").isNullOrBlank()) {
             findings += WebFinding(
                 FindingSeverity.LOW,
                 "HSTS header missing",
@@ -190,33 +193,34 @@ class WebAuditEngine {
             )
         }
 
-        headers.header("Set-Cookie")?.let { cookies ->
-            cookies.forEach { cookie ->
-                val lower = cookie.lowercase(Locale.ROOT)
-                if (https && !lower.contains("; secure")) {
-                    findings += WebFinding(
-                        FindingSeverity.LOW,
-                        "Cookie without Secure attribute",
-                        cookie.take(180),
-                        "Add the Secure attribute to cookies that should only travel over HTTPS."
-                    )
-                }
-                if (!lower.contains("; httponly")) {
-                    findings += WebFinding(
-                        FindingSeverity.INFO,
-                        "Cookie without HttpOnly attribute",
-                        cookie.substringBefore(';').take(100),
-                        "Use HttpOnly for cookies that do not need to be read by client-side scripts."
-                    )
-                }
-                if (!lower.contains("samesite=")) {
-                    findings += WebFinding(
-                        FindingSeverity.LOW,
-                        "Cookie without SameSite attribute",
-                        cookie.substringBefore(';').take(100),
-                        "Set an appropriate SameSite value for session and authentication cookies."
-                    )
-                }
+        headers.headerValues("Set-Cookie").forEach { cookie ->
+            val attributes = cookie.split(';').drop(1).map { it.trim().lowercase(Locale.ROOT) }
+            val lower = cookie.lowercase(Locale.ROOT)
+            val cookieName = cookie.substringBefore(';').take(100)
+
+            if (https && "secure" !in attributes) {
+                findings += WebFinding(
+                    FindingSeverity.LOW,
+                    "Cookie without Secure attribute",
+                    cookie.take(180),
+                    "Add the Secure attribute to cookies that should only travel over HTTPS."
+                )
+            }
+            if ("httponly" !in attributes) {
+                findings += WebFinding(
+                    FindingSeverity.INFO,
+                    "Cookie without HttpOnly attribute",
+                    cookieName,
+                    "Use HttpOnly for cookies that do not need to be read by client-side scripts."
+                )
+            }
+            if (attributes.none { it.startsWith("samesite=") }) {
+                findings += WebFinding(
+                    FindingSeverity.LOW,
+                    "Cookie without SameSite attribute",
+                    cookieName,
+                    "Set an appropriate SameSite value for session and authentication cookies."
+                )
             }
         }
 
@@ -248,10 +252,11 @@ class WebAuditEngine {
         return findings.distinctBy { it.title to it.evidence }
     }
 
+    private fun Map<String, List<String>>.headerValues(name: String): List<String> =
+        entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value.orEmpty()
+
     private fun Map<String, List<String>>.header(name: String): String? =
-        entries.firstOrNull { it.key.equals(name, ignoreCase = true) }
-            ?.value
-            ?.joinToString(", ")
+        headerValues(name).takeIf { it.isNotEmpty() }?.joinToString(", ")
 
     private data class TlsDetails(
         val cipherSuite: String?,
