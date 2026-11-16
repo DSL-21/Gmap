@@ -99,9 +99,9 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
                     audit.certificateSubject?.let { Text("Certificate: $it") }
                     audit.certificateIssuer?.let { Text("Issuer: $it") }
                     if (audit.certificateSans.isNotEmpty()) {
-                        Text("SANs: §{audit.certificateSans.joinToString(", ")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Text("SANs: ${audit.certificateSans.joinToString(", ")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
-                    audit.redirectChain.drop(1).forEach { Text("Redirect → §{it}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                    audit.redirectChain.drop(1).forEach { Text("Redirect → ${it}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     audit.certificateExpiryEpochMs?.let {
                         Text("Expires: ${SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).format(Date(it))}")
                     }
