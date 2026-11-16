@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -29,6 +30,7 @@ import com.dsl.gmap.scanner.viewmodel.ScanViewModel
 private enum class AppTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Network", Icons.Default.Dashboard),
     SCAN("Scan", Icons.Default.Search),
+    WEB("Web", Icons.Default.Info),
     HISTORY("History", Icons.Default.History),
     SETTINGS("Settings", Icons.Default.Settings)
 }
@@ -65,6 +67,7 @@ fun GmapApp() {
             when (selectedTab) {
                 AppTab.DASHBOARD -> DashboardScreen(onStartScan = { selectedTab = AppTab.SCAN })
                 AppTab.SCAN -> ScanScreen(viewModel = scanViewModel)
+                AppTab.WEB -> WebScanScreen()
                 AppTab.HISTORY -> HistoryScreen(viewModel = scanViewModel)
                 AppTab.SETTINGS -> SettingsScreen(viewModel = scanViewModel)
             }
