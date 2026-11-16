@@ -57,6 +57,32 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
+fun ScannerHubScreen(
+    tcpViewModel: ScanViewModel,
+    udpViewModel: com.dsl.gmap.scanner.viewmodel.UdpScanViewModel
+) {
+    var udpMode by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (udpMode) {
+                OutlinedButton(onClick = { udpMode = false }, modifier = Modifier.weight(1f)) { Text("TCP") }
+                Button(onClick = { udpMode = true }, modifier = Modifier.weight(1f)) { Text("UDP") }
+            } else {
+                Button(onClick = { udpMode = false }, modifier = Modifier.weight(1f)) { Text("TCP") }
+                OutlinedButton(onClick = { udpMode = true }, modifier = Modifier.weight(1f)) { Text("UDP") }
+            }
+        }
+        Box(modifier = Modifier.weight(1f)) {
+            if (udpMode) UdpScanScreen(udpViewModel) else ScanScreen(tcpViewModel)
+        }
+    }
+}
+
+@Composable
 fun DashboardScreen(
     onStartScan: () -> Unit
 ) {
@@ -442,10 +468,12 @@ fun ScanScreen(viewModel: ScanViewModel) {
 @Composable
 fun HistoryScreen(
     viewModel: ScanViewModel,
-    webAuditViewModel: com.dsl.gmap.web.WebAuditViewModel
+    webAuditViewModel: com.dsl.gmap.web.WebAuditViewModel,
+    udpScanViewModel: com.dsl.gmap.scanner.viewmodel.UdpScanViewModel
 ) {
     val sessions by viewModel.history.collectAsState()
     val webAudits by webAuditViewModel.history.collectAsState()
+    val udpSessions by udpScanViewModel.history.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -456,10 +484,11 @@ fun HistoryScreen(
                 Text("FINDINGS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                 Text("This app session", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
-            if (sessions.isNotEmpty() || webAudits.isNotEmpty()) {
+            if (sessions.isNotEmpty() || webAudits.isNotEmpty() || udpSessions.isNotEmpty()) {
                 OutlinedButton(onClick = {
                     viewModel.clearHistory()
                     webAuditViewModel.clearHistory()
+                    udpScanViewModel.clearHistory()
                 }) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
@@ -468,16 +497,48 @@ fun HistoryScreen(
             }
         }
 
-        if (sessions.isEmpty() && webAudits.isEmpty()) {
+        if (sessions.isEmpty() && webAudits.isEmpty() && udpSessions.isEmpty()) {
             EmptyFeatureCard(
                 heading = "No findings yet",
-                description = "Host scans and web audits will appear here for this app session."
+                description = "Host scans, UDP probes and web audits will appear here for this app session."
             )
         }
 
         if (sessions.isNotEmpty()) {
             Text("HOST SCANS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             sessions.forEach { session -> HistorySessionCard(session) }
+        }
+
+
+        if (udpSessions.isNotEmpty()) {
+            Text("UDP SCANS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            udpSessions.forEach { session ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(session.target, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(session.resolvedAddress, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Text("UDP ports ${session.portRange} · ${session.totalPorts} checked", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("${session.openCount} open")
+                            Text("${session.openFilteredCount} open|filtered", color = MaterialTheme.colorScheme.tertiary)
+                            Text("${session.closedCount} closed")
+                        }
+                        session.results.forEach { result ->
+                            Text(
+                                "${result.port}/UDP · ${result.state.name.replace('_', '|')}${result.serviceHint?.let { " · $it" } ?: ""}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (webAudits.isNotEmpty()) {
