@@ -24,6 +24,14 @@ class LocalNetworkAccessTest {
     }
 
     @Test
+    fun detectsLocalHostsWhenProvidedAsFullUrls() {
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("http://192.168.1.1/"))
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("https://printer.local/status"))
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("http://router:8080/"))
+        assertTrue(LocalNetworkAccess.targetRequiresPermission("http://[fe80::1]/"))
+    }
+
+    @Test
     fun doesNotRequestLanPermissionForPublicTargets() {
         assertFalse(LocalNetworkAccess.targetRequiresPermission("8.8.8.8"))
         assertFalse(LocalNetworkAccess.targetRequiresPermission("example.com"))

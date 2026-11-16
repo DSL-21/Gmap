@@ -23,7 +23,19 @@ object LocalNetworkAccess {
             ContextCompat.checkSelfPermission(context, PERMISSION) == PackageManager.PERMISSION_GRANTED
 
     fun targetRequiresPermission(target: String): Boolean {
-        val value = target.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
+        val raw = target.trim()
+        if (raw.isEmpty()) return false
+
+        // Accept both bare hostnames/IPs and complete HTTP(S) URLs.
+        val candidate = if (raw.contains("://")) raw else "https://$raw"
+        val parsedHost = runCatching { java.net.URI(candidate).host }.getOrNull()
+        val fallbackHost = raw.substringBefore('/').let { part ->
+            if (part.startsWith("[")) part.substringAfter('[').substringBefore(']')
+            else if (part.count { it == ':' } == 1) part.substringBefore(':')
+            else part
+        }
+        val value = (parsedHost ?: fallbackHost)
+            .removePrefix("[").removeSuffix("]").substringBefore('%')
         if (value.equals("localhost", ignoreCase = true) ||
             value.endsWith(".local", ignoreCase = true) ||
             value.endsWith(".lan", ignoreCase = true) ||

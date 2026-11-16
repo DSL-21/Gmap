@@ -1,4 +1,4 @@
-name: Publish Gmap 2.3.1 Release
+name: Publish Gmap 2.4.0 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-3-1
+  group: publish-gmap-2-4-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.3.1
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.3.1')
+    name: Build, test and publish Gmap 2.4.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.4.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,33 +50,34 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.3.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.4.0.apk
           cd release-assets
-          sha256sum gmap-2.3.1.apk > gmap-2.3.1.apk.sha256
+          sha256sum gmap-2.4.0.apk > gmap-2.4.0.apk.sha256
 
       - name: Create GitHub Release and upload APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v2.3.1 \
-            release-assets/gmap-2.3.1.apk \
-            release-assets/gmap-2.3.1.apk.sha256 \
+          gh release create v2.4.0 \
+            release-assets/gmap-2.4.0.apk \
+            release-assets/gmap-2.4.0.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.3.1" \
-            --notes "## Gmap 2.3.1
+            --title "Gmap 2.4.0" \
+            --notes "## Gmap 2.4.0
 
           ### What's new
-          - Cleaner Network dashboard with a compact connection summary and one-tap local discovery.
-          - Four primary destinations: Network, Scan, Web and Results.
-          - Version-aware software fingerprints and CPE 2.3 candidate generation.
-          - Optional CVE enrichment from NVD, CISA KEV and FIRST EPSS.
-          - Results include CVSS, EPSS, KEV status and remediation guidance where available.
-          - Web report clipboard export removed to preserve strict RAM-only result handling.
-          - TCP/UDP scanning, Web audit and in-memory history are retained.
+          - Android 17/API 37 target with runtime local-network permission for LAN scans and local Web targets.
+          - Parallel local network discovery with 27 common TCP probes and likely device-role labels.
+          - Expanded read-only service fingerprints for SMB2 and RDP negotiation, plus broader HTTP/TLS port coverage.
+          - CPE 2.3 fingerprints for additional web stacks including PHP, Tomcat, Jetty, OpenResty, Gunicorn, Uvicorn, Werkzeug, HAProxy and Traefik.
+          - Expanded Web audit: HEAD fallback, same-host redirects, CORS, modern security headers, TLS SANs and public endpoint checks.
+          - Optional Web server CPE/CVE correlation with NVD, CISA KEV and FIRST EPSS.
+          - Improved UI for public endpoint status, identified software, CVE/KEV/EPSS and remediation evidence.
+          - Recent results remain RAM-only; no report exports, clipboard export, database or cloud sync.
 
           ### Download
-          Download **gmap-2.3.1.apk** for Android 8.0 (API 26) or later.
+          Download **gmap-2.4.0.apk** for Android 8.0 (API 26) or later.
 
           ### Build and scope
-          This is a CI debug-signed APK for direct installation and testing, not a production-keystore or Google Play package. A SHA-256 checksum is included. Local discovery uses TCP presence probes rather than ARP. UDP silence is reported as OPEN|FILTERED. Web audit checks HTTP/TLS configuration and security headers; it is not an exploit scanner or CVE audit. Gmap does not claim raw TCP SYN, raw ICMP crafting, Wi-Fi monitor mode or packet injection. The app targets Android SDK 36."
+          This is a CI debug-signed APK for direct device testing, not a production-keystore or Google Play package. A SHA-256 checksum is included. Local discovery uses TCP presence probes rather than ARP. UDP silence is reported as OPEN|FILTERED. Web audit is a read-only configuration and public-metadata audit, not an exploit scanner. Gmap does not claim raw TCP SYN, raw ICMP crafting, Wi-Fi monitor mode or packet injection. The app targets Android SDK 37 and requests ACCESS_LOCAL_NETWORK for local network operations."
