@@ -14,8 +14,8 @@ class TcpConnectScannerTest {
 
     @Test
     fun scannerHasStrictMobileConcurrencyCeiling() {
-        assertTrue(TcpConnectScanner.MAX_CONCURRENT_PROBES <= 128)
-        assertTrue(TcpConnectScanner.MAX_CONCURRENT_PROBES > 0)
+        assertEquals(32, TcpConnectScanner.MAX_CONCURRENT_PROBES)
+        assertTrue(TcpConnectScanner.MIN_CONCURRENT_PROBES in 1..TcpConnectScanner.MAX_CONCURRENT_PROBES)
     }
 
 
