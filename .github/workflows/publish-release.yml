@@ -1,4 +1,4 @@
-name: Publish Gmap 2.5.0 Security Release
+name: Publish Gmap 2.6.0 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-5-0
+  group: publish-gmap-2-6-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.5.0
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.5.0')
+    name: Build, test and publish Gmap 2.6.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.6.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,56 +50,38 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.5.0.apk
-          (cd release-assets && sha256sum gmap-2.5.0.apk > gmap-2.5.0.apk.sha256)
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.6.0.apk
+          (cd release-assets && sha256sum gmap-2.6.0.apk > gmap-2.6.0.apk.sha256)
           cat > release-assets/release-notes.md <<'EOF'
-          ## Gmap 2.5.0 — Security hardening release
+          ## Gmap 2.6.0 — TCP scanner reliability
 
-          ### Security changes
-          - Hard cap of 128 concurrent TCP connection probes to protect mobile device resources.
-          - Web audit redacts Set-Cookie values and omits URL query parameters from requests and results.
-          - Web redirects cannot pivot to another port or downgrade HTTPS; a same-host HTTP-to-default-HTTPS upgrade is allowed.
-          - Bounded response header metadata and disabled automatic redirects for public vulnerability intelligence requests.
-          - Added regression tests for the security-sensitive behaviour.
+          ### Scanner improvements
+          - Resolve hostnames to all returned IPv4 and IPv6 addresses and scan each address independently.
+          - Preserve the target IP on every result, so identical ports on different addresses remain distinguishable.
+          - Aggregate scan progress and result counts across resolved addresses.
+          - Start selector-managed TCP probing at the existing 128-probe safety ceiling, with adaptive backoff under local socket pressure.
+          - Classify timeout-like connection failures as FILTERED rather than CLOSED; refused connections remain CLOSED and unknown failures remain ERROR.
+          - Add regression coverage ensuring every requested port is represented exactly once.
 
-          ### Repository and CI
-          - Removed tracked IDE state, Kotlin error logs and an unused legacy layout.
-          - GitHub Actions pinned to immutable commit SHAs.
-          - Android Lint added to CI; redundant CI APK artifacts removed.
-          - Dependabot enabled for Gradle and GitHub Actions dependencies.
+          ### UI and documentation
+          - Remove redundant scan-screen disclaimer and instructional copy.
+          - Update scanner architecture documentation and changelog.
 
-          ### Security scope and limitations
-          Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. The Web audit still uses the platform URL connection stack and does not pin DNS answers to sockets; DNS rebinding remains a documented limitation when a user manually audits an untrusted hostname. HTTP auditing remains available and is unencrypted. Never enter credentials or sensitive URL parameters. This APK is CI debug-signed, not a production or Play Store package.
+          ### Validation and limitations
+          Android Lint, unit tests and debug APK assembly passed in GitHub Actions before merge. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
+
+          Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. TCP Connect scanning is not SYN scanning; non-root Android restrictions still apply. This APK is CI debug-signed, not a production or Play Store package.
           EOF
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v2.5.0
+          RELEASE_TAG: v2.6.0
         run: |
           gh release create "$RELEASE_TAG" \
-            release-assets/gmap-2.5.0.apk \
-            release-assets/gmap-2.5.0.apk.sha256 \
+            release-assets/gmap-2.6.0.apk \
+            release-assets/gmap-2.6.0.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.5.0 — Security hardening" \
+            --title "Gmap 2.6.0 — TCP scanner reliability" \
             --notes-file release-assets/release-notes.md
-
-      - name: Remove superseded releases and tags
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v2.5.0
-        run: |
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' |
-          while IFS= read -r old_tag; do
-            [ "$old_tag" = "$RELEASE_TAG" ] && continue
-            gh release delete "$old_tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          done
-
-          gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" --jq '.[].name' |
-          while IFS= read -r old_tag; do
-            [ "$old_tag" = "$RELEASE_TAG" ] && continue
-            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$old_tag" >/dev/null 2>&1; then
-              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$old_tag"
-            fi
-          done
