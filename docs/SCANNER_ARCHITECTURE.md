@@ -1,4 +1,4 @@
-# Gmap scanner architecture — 2.5.0
+# Gmap scanner architecture — 2.6.0
 
 ## Product and trust boundary
 
@@ -23,7 +23,7 @@ The TCP engine uses non-blocking Java NIO SocketChannel and Selector rather than
 - No response before deadline: FILTERED.
 - Local permission, routing or I/O failure: ERROR.
 
-One host may be scanned across ports 1–65535. The maximum controls simultaneous sockets, not the permitted total number of ports. This is TCP Connect, not raw-packet SYN scanning.
+A hostname is resolved with `InetAddress.getAllByName()` and every returned IPv4/IPv6 address is scanned independently across ports 1–65535. Results retain the address that produced them, so identical port numbers on different addresses are not collapsed. The maximum controls simultaneous sockets per address scan, not the permitted total number of ports. This is TCP Connect, not raw-packet SYN scanning.
 
 ## Service identification
 
