@@ -136,7 +136,8 @@ class TcpConnectScanner {
                     val message = exception.message.orEmpty()
                     val lowerMessage = message.lowercase()
                     when {
-                        lowerMessage.contains("timed out") || lowerMessage.contains("timeout") ->
+                        lowerMessage.contains("timed out") || lowerMessage.contains("timeout") -> {
+                            registerRemoteTimeout()
                             PortScanResult(
                                 port = port,
                                 state = PortState.FILTERED,
