@@ -56,13 +56,11 @@ class TcpConnectScanner {
         var filteredCount = 0
         var errorCount = 0
 
-        // There is no fixed 48/128 worker cap. The window can grow to the
-        // requested scan size and backs off only when the OS reports pressure.
-        // Hard ceiling protects mobile sockets, descriptors, battery and radio use.
-        var window = minOf(
-            total,
-            maxOf(16, minOf(MAX_CONCURRENT_PROBES, Runtime.getRuntime().availableProcessors() * 16))
-        )
+        // SocketChannel probes are multiplexed by one Selector, not one thread
+        // per port. Start at the mobile-safe ceiling so low CPU core counts do not
+        // artificially throttle network concurrency; back off immediately on
+        // local socket/file-descriptor pressure.
+        var window = minOf(total, MAX_CONCURRENT_PROBES)
         var resourceBackoffUntil = 0L
         var completedSinceGrowth = 0
         var resourceCooldown = 0
@@ -125,11 +123,30 @@ class TcpConnectScanner {
 
         fun classifyConnectFailure(port: Int, exception: IOException): PortScanResult {
             return when (exception) {
-                is ConnectException -> PortScanResult(
-                    port = port,
-                    state = PortState.CLOSED,
-                    detail = "Connection refused."
-                )
+                is ConnectException -> {
+                    val message = exception.message.orEmpty()
+                    val lowerMessage = message.lowercase()
+                    when {
+                        lowerMessage.contains("timed out") || lowerMessage.contains("timeout") ->
+                            PortScanResult(
+                                port = port,
+                                state = PortState.FILTERED,
+                                detail = "Connection timed out; the port may be filtered or the host may not respond."
+                            )
+                        lowerMessage.contains("refused") ->
+                            PortScanResult(
+                                port = port,
+                                state = PortState.CLOSED,
+                                detail = "Connection refused."
+                            )
+                        else ->
+                            PortScanResult(
+                                port = port,
+                                state = PortState.ERROR,
+                                detail = message.ifBlank { "TCP connection failed." }
+                            )
+                    }
+                }
                 is SocketTimeoutException -> PortScanResult(
                     port = port,
                     state = PortState.FILTERED,

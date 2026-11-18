@@ -350,17 +350,6 @@ fun ScanScreen(viewModel: ScanViewModel) {
             singleLine = true,
             enabled = !state.isScanning
         )
-        Text(
-            "Only scan systems you own or are explicitly authorized to test.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            "Use Network to discover hosts on the active local IPv4 subnet.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedTextField(
                 value = startPort,
@@ -861,6 +850,9 @@ private fun PortResultRow(result: PortScanResult) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text("${result.port} / TCP", fontWeight = FontWeight.Bold)
+            result.targetAddress?.let { address ->
+                Text(address, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+            }
             Text(
                 result.fingerprint?.service ?: result.serviceHint ?: "Unknown service",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

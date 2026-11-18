@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 
 class ScanViewModel(
     private val scanner: TcpConnectScanner = TcpConnectScanner(),
@@ -92,56 +93,92 @@ class ScanViewModel(
             )
 
             try {
-                val address = withContext(Dispatchers.IO) { InetAddress.getByName(target) }
+                // A hostname can resolve to several A/AAAA records (for example,
+                // CDN edges). Scan every returned address instead of silently choosing
+                // only the first one returned by getByName().
+                val addresses = withContext(Dispatchers.IO) {
+                    InetAddress.getAllByName(target).distinctBy { it.hostAddress }
+                }
+                require(addresses.isNotEmpty()) { "The target did not resolve to an IP address." }
+
+                val totalPorts = portRange.size * addresses.size
+                val allResults = ArrayList<com.dsl.gmap.scanner.model.PortScanResult>(totalPorts)
+                val identifiedPorts = ArrayList<com.dsl.gmap.scanner.model.PortScanResult>()
+                val resolvedAddresses = addresses.mapNotNull { it.hostAddress }
+                val scanStartedNanos = System.nanoTime()
+
                 _uiState.update {
                     it.copy(
-                        resolvedAddress = address.hostAddress,
-                        statusMessage = "Scanning " + address.hostAddress,
-                        total = portRange.size
+                        resolvedAddress = resolvedAddresses.joinToString(", "),
+                        statusMessage = "Scanning ${addresses.size} resolved address(es)",
+                        total = totalPorts
                     )
                 }
 
-                val results = scanner.scan(
-                    address = address,
-                    startPort = portRange.start,
-                    endPort = portRange.end,
-                    timeoutMs = selectedTimeoutMs
-                ) { progress, latestResult ->
-                    _uiState.update { current ->
-                        val updatedOpenPorts = if (latestResult.state == PortState.OPEN) {
-                            (current.openPorts + latestResult)
-                                .distinctBy { result -> result.port }
-                                .sortedBy { result -> result.port }
-                        } else {
-                            current.openPorts
-                        }
+                addresses.forEachIndexed { addressIndex, address ->
+                    val addressLabel = address.hostAddress ?: address.hostName
+                    val completedBefore = allResults.size
+                    val previousOpen = allResults.count { it.state == PortState.OPEN }
+                    val previousClosed = allResults.count { it.state == PortState.CLOSED }
+                    val previousFiltered = allResults.count { it.state == PortState.FILTERED }
+                    val previousErrors = allResults.count { it.state == PortState.ERROR }
 
-                        current.copy(
-                            completed = maxOf(current.completed, progress.completed),
-                            total = progress.total,
-                            progress = maxOf(current.progress, progress.fraction),
-                            openCount = progress.openCount,
-                            closedCount = progress.closedCount,
-                            filteredCount = progress.filteredCount,
-                            errorCount = progress.errorCount,
-                            openPorts = updatedOpenPorts,
-                            elapsedMs = progress.elapsedMs,
-                            probesPerSecond = progress.probesPerSecond,
-                            statusMessage = "Scanning " + address.hostAddress
-                        )
+                    _uiState.update {
+                        it.copy(statusMessage = "Scanning $addressLabel (${addressIndex + 1}/${addresses.size})")
                     }
+
+                    val addressResults = scanner.scan(
+                        address = address,
+                        startPort = portRange.start,
+                        endPort = portRange.end,
+                        timeoutMs = selectedTimeoutMs
+                    ) { progress, latestResult ->
+                        val taggedResult = latestResult.copy(targetAddress = addressLabel)
+                        _uiState.update { current ->
+                            val updatedOpenPorts = if (taggedResult.state == PortState.OPEN) {
+                                (current.openPorts + taggedResult)
+                                    .distinctBy { result -> "${result.targetAddress}:${result.port}" }
+                                    .sortedWith(compareBy({ it.targetAddress }, { it.port }))
+                            } else {
+                                current.openPorts
+                            }
+
+                            val completed = completedBefore + progress.completed
+                            val elapsedNanos = (System.nanoTime() - scanStartedNanos).coerceAtLeast(1L)
+                            current.copy(
+                                completed = completed,
+                                total = totalPorts,
+                                progress = completed.toFloat() / totalPorts.toFloat(),
+                                openCount = previousOpen + progress.openCount,
+                                closedCount = previousClosed + progress.closedCount,
+                                filteredCount = previousFiltered + progress.filteredCount,
+                                errorCount = previousErrors + progress.errorCount,
+                                openPorts = updatedOpenPorts,
+                                elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNanos),
+                                probesPerSecond = completed * 1_000_000_000.0 / elapsedNanos,
+                                statusMessage = "Scanning $addressLabel (${addressIndex + 1}/${addresses.size})"
+                            )
+                        }
+                    }
+
+                    val taggedResults = addressResults.map { it.copy(targetAddress = addressLabel) }
+                    allResults.addAll(taggedResults)
+                    val tcpOpenPorts = taggedResults.filter { it.state == PortState.OPEN }
+                    _uiState.update {
+                        it.copy(statusMessage = "Identifying services on $addressLabel (${tcpOpenPorts.size} open ports)...")
+                    }
+                    identifiedPorts.addAll(
+                        serviceDetector.identify(
+                            address = address,
+                            originalTarget = target,
+                            openPorts = tcpOpenPorts,
+                            timeoutMs = selectedTimeoutMs
+                        )
+                    )
                 }
 
-                val tcpOpenPorts = results.filter { it.state == PortState.OPEN }
-                _uiState.update {
-                    it.copy(statusMessage = "Identifying services on " + tcpOpenPorts.size + " open ports...")
-                }
-                val openPorts = serviceDetector.identify(
-                    address = address,
-                    originalTarget = target,
-                    openPorts = tcpOpenPorts,
-                    timeoutMs = selectedTimeoutMs
-                )
+                val results = allResults
+                val openPorts = identifiedPorts
                 val openCount = openPorts.size
                 val closedCount = results.count { it.state == PortState.CLOSED }
                 val filteredCount = results.count { it.state == PortState.FILTERED }
@@ -210,7 +247,7 @@ class ScanViewModel(
                 val session = ScanSessionSummary(
                     id = finishedAt,
                     target = target,
-                    resolvedAddress = address.hostAddress ?: target,
+                    resolvedAddress = resolvedAddresses.joinToString(", "),
                     portRange = portRange.start.toString() + "-" + portRange.end,
                     totalPorts = results.size,
                     openCount = openCount,

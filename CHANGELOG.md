@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.6.0 — 2026-11-18
+
+### TCP scan reliability
+- Resolve hostnames with all available IPv4/IPv6 addresses and scan each returned address instead of selecting only one DNS answer.
+- Tag TCP results with the address that produced them so repeated port numbers across multiple resolved addresses remain distinguishable.
+- Aggregate scan progress and state counts across all resolved addresses.
+- Add a regression test ensuring every port in a requested range produces exactly one result while multiple listeners are detected.
+
+### Interface
+- Removed redundant instructional/disclaimer copy from the TCP scan form.
+
+### Validation note
+- Physical-device validation is still required for DNS/CDN targets and mobile network behaviour; a local unit test cannot prove that a remote host will respond on every address.
+
+
 ## 2.5.0 — 2026-11-16
 
 ### Security hardening

@@ -43,6 +43,25 @@ class TcpConnectScannerTest {
     }
 
     @Test
+    fun returnsExactlyOneResultForEveryPortInRequestedRange() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val first = server.localPort - 1
+            val last = server.localPort + 1
+            val results = TcpConnectScanner().scan(
+                address = InetAddress.getLoopbackAddress(),
+                startPort = first,
+                endPort = last,
+                timeoutMs = 500
+            )
+
+            assertEquals(3, results.size)
+            assertEquals((first..last).toList(), results.map { it.port }.sorted())
+            assertEquals(results.size, results.map { it.port }.distinct().size)
+            assertEquals(PortState.OPEN, results.single { it.port == server.localPort }.state)
+        }
+    }
+
+    @Test
     fun detectsRefusedTcpConnectionAsClosed() = runBlocking {
         val closedPort = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use {
             it.localPort

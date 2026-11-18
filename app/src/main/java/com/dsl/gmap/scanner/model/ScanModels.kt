@@ -8,7 +8,8 @@ data class PortScanResult(
     val latencyMs: Long? = null,
     val serviceHint: String? = null,
     val detail: String? = null,
-    val fingerprint: ServiceFingerprint? = null
+    val fingerprint: ServiceFingerprint? = null,
+    val targetAddress: String? = null
 )
 
 data class ServiceFingerprint(
