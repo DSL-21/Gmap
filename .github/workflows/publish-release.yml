@@ -1,4 +1,4 @@
-name: Publish Gmap 2.6.0 Release
+name: Publish Gmap 2.7.0 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-6-0
+  group: publish-gmap-2-7-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.6.0
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.6.0')
+    name: Build, test and publish Gmap 2.7.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.7.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,16 +50,16 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.6.0.apk
-          (cd release-assets && sha256sum gmap-2.6.0.apk > gmap-2.6.0.apk.sha256)
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.7.0.apk
+          (cd release-assets && sha256sum gmap-2.7.0.apk > gmap-2.7.0.apk.sha256)
           cat > release-assets/release-notes.md <<'EOF'
-          ## Gmap 2.6.0 — TCP scanner reliability
+          ## Gmap 2.7.0 — adaptive TCP scanner reliability
 
           ### Scanner improvements
           - Resolve hostnames to all returned IPv4 and IPv6 addresses and scan each address independently.
           - Preserve the target IP on every result, so identical ports on different addresses remain distinguishable.
           - Aggregate scan progress and result counts across resolved addresses.
-          - Start selector-managed TCP probing at the existing 128-probe safety ceiling, with adaptive backoff under local socket pressure.
+          - Cap selector-managed TCP probing at 32 concurrent sockets and reduce concurrency adaptively on repeated remote timeouts or local socket pressure.
           - Classify timeout-like connection failures as FILTERED rather than CLOSED; refused connections remain CLOSED and unknown failures remain ERROR.
           - Add regression coverage ensuring every requested port is represented exactly once.
 
@@ -68,7 +68,7 @@ jobs:
           - Update scanner architecture documentation and changelog.
 
           ### Validation and limitations
-          Android Lint, unit tests and debug APK assembly passed in GitHub Actions before merge. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
+          Android Lint, unit tests and debug APK assembly must pass in GitHub Actions before release. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The adaptive backoff reduces burst pressure but cannot override server-side filtering, carrier restrictions or transient routing. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
 
           Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. TCP Connect scanning is not SYN scanning; non-root Android restrictions still apply. This APK is CI debug-signed, not a production or Play Store package.
           EOF
@@ -76,12 +76,12 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v2.6.0
+          RELEASE_TAG: v2.7.0
         run: |
           gh release create "$RELEASE_TAG" \
-            release-assets/gmap-2.6.0.apk \
-            release-assets/gmap-2.6.0.apk.sha256 \
+            release-assets/gmap-2.7.0.apk \
+            release-assets/gmap-2.7.0.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.6.0 — TCP scanner reliability" \
+            --title "Gmap 2.7.0 — adaptive TCP scanner reliability" \
             --notes-file release-assets/release-notes.md

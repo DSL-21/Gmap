@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.7.0 — 2026-11-18
+
+### TCP scan reliability
+- Lowered the maximum number of simultaneous TCP connect probes from 128 to 32 to reduce burst pressure on mobile networks and remote services.
+- Added adaptive congestion backoff when TCP connection attempts time out, halving the active probe window and temporarily slowing new probes before gradual recovery.
+- Kept timeouts classified as FILTERED/NO RESPONSE rather than incorrectly reporting them as CLOSED; explicit connection refusals remain CLOSED.
+- Updated the concurrency regression test to enforce the new 32-probe ceiling and minimum backoff window.
+
+### Validation note
+- CI and physical-device testing are required before treating remote scan consistency as verified. Network filtering, server rate limits, carrier policies and transient routing can still produce different results between scans.
+
 ## 2.6.0 — 2026-11-18
 
 ### TCP scan reliability
