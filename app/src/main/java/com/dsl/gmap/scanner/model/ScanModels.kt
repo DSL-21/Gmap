@@ -5,6 +5,7 @@ enum class PortState { OPEN, CLOSED, FILTERED, ERROR }
 data class PortScanResult(
     val port: Int,
     val state: PortState,
+    val targetAddress: String? = null,
     val latencyMs: Long? = null,
     val serviceHint: String? = null,
     val detail: String? = null,
