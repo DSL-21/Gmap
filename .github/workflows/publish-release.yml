@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-6-0
+  group: publish-gmap-2-7-0
   cancel-in-progress: false
 
 jobs:
@@ -59,7 +59,7 @@ jobs:
           - Resolve hostnames to all returned IPv4 and IPv6 addresses and scan each address independently.
           - Preserve the target IP on every result, so identical ports on different addresses remain distinguishable.
           - Aggregate scan progress and result counts across resolved addresses.
-          - Start selector-managed TCP probing at the existing 32-probe safety ceiling, with adaptive backoff under local socket pressure.
+          - Cap selector-managed TCP probing at 32 concurrent sockets and reduce concurrency adaptively on repeated remote timeouts or local socket pressure.
           - Classify timeout-like connection failures as FILTERED rather than CLOSED; refused connections remain CLOSED and unknown failures remain ERROR.
           - Add regression coverage ensuring every requested port is represented exactly once.
 
@@ -68,7 +68,7 @@ jobs:
           - Update scanner architecture documentation and changelog.
 
           ### Validation and limitations
-          Android Lint, unit tests and debug APK assembly passed in GitHub Actions before merge. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
+          Android Lint, unit tests and debug APK assembly must pass in GitHub Actions before release. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The adaptive backoff reduces burst pressure but cannot override server-side filtering, carrier restrictions or transient routing. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
 
           Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. TCP Connect scanning is not SYN scanning; non-root Android restrictions still apply. This APK is CI debug-signed, not a production or Play Store package.
           EOF
