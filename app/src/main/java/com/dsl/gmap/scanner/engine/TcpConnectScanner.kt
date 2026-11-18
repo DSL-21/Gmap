@@ -65,6 +65,15 @@ class TcpConnectScanner {
         var completedSinceGrowth = 0
         var resourceCooldown = 0
 
+        fun registerRemoteTimeout() {
+            // Repeated unanswered probes are a signal to reduce pressure even when
+            // the local device has not exhausted its own sockets. This protects
+            // mobile networks and avoids overwhelming rate-limited remote hosts.
+            window = maxOf(MIN_CONCURRENT_PROBES, window / 2)
+            resourceCooldown = maxOf(resourceCooldown, 512)
+            resourceBackoffUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(100)
+        }
+
         fun record(result: PortScanResult) {
             results.add(result)
             completed++
@@ -133,6 +142,7 @@ class TcpConnectScanner {
                                 state = PortState.FILTERED,
                                 detail = "Connection timed out; the port may be filtered or the host may not respond."
                             )
+                        }
                         lowerMessage.contains("refused") ->
                             PortScanResult(
                                 port = port,
@@ -147,11 +157,14 @@ class TcpConnectScanner {
                             )
                     }
                 }
-                is SocketTimeoutException -> PortScanResult(
-                    port = port,
-                    state = PortState.FILTERED,
-                    detail = "Connection timed out; the port may be filtered or the host may not respond."
-                )
+                is SocketTimeoutException -> {
+                    registerRemoteTimeout()
+                    PortScanResult(
+                        port = port,
+                        state = PortState.FILTERED,
+                        detail = "Connection timed out; the port may be filtered or the host may not respond."
+                    )
+                }
                 is NoRouteToHostException -> PortScanResult(
                     port = port,
                     state = PortState.ERROR,
@@ -305,11 +318,12 @@ class TcpConnectScanner {
                     val probe = deadlines.poll() ?: break
                     if (!probe.completed) {
                         closePending(probe)
+                        registerRemoteTimeout()
                         record(
                             PortScanResult(
                                 port = probe.port,
                                 state = PortState.FILTERED,
-                                detail = "No TCP response before timeout."
+                                detail = "No TCP response before timeout; the port may be filtered or rate-limited."
                             )
                         )
                     }
@@ -383,6 +397,7 @@ class TcpConnectScanner {
         var completed: Boolean = false
     )
     companion object {
-        const val MAX_CONCURRENT_PROBES = 128
+        const val MIN_CONCURRENT_PROBES = 4
+        const val MAX_CONCURRENT_PROBES = 32
     }
 }
