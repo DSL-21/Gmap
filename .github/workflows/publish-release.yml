@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-7-0
+  group: publish-gmap-2-8-0
   cancel-in-progress: false
 
 jobs:
