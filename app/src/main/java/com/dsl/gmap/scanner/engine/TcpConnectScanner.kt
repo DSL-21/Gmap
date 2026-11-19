@@ -62,7 +62,11 @@ class TcpConnectScanner {
         var errorCount = 0
 
         // Begin conservatively, then ramp up when a batch of probes is responsive.
-        var window = minOf(total, config.maxConcurrentProbes, INITIAL_CONCURRENT_PROBES)
+        var window = if (config.adaptiveConcurrency) {
+            minOf(total, config.maxConcurrentProbes, INITIAL_CONCURRENT_PROBES)
+        } else {
+            minOf(total, config.maxConcurrentProbes)
+        }
         var resourceBackoffUntil = 0L
         var outcomeSampleCount = 0
         var timeoutSampleCount = 0
