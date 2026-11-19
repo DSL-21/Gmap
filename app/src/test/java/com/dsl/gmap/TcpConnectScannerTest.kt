@@ -2,6 +2,8 @@ package com.dsl.gmap
 
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
 import com.dsl.gmap.scanner.model.PortState
+import com.dsl.gmap.scanner.model.TcpScanMode
+import com.dsl.gmap.scanner.model.TcpScanSettings
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,8 +16,8 @@ class TcpConnectScannerTest {
 
     @Test
     fun scannerHasStrictMobileConcurrencyCeiling() {
-        assertEquals(32, TcpConnectScanner.MAX_CONCURRENT_PROBES)
-        assertTrue(TcpConnectScanner.MIN_CONCURRENT_PROBES in 1..TcpConnectScanner.MAX_CONCURRENT_PROBES)
+        assertEquals(128, TcpScanSettings.MAX_CONCURRENCY)
+        assertTrue(TcpScanSettings.MIN_CONCURRENCY in 1..TcpScanSettings.MAX_CONCURRENCY)
     }
 
 
@@ -27,7 +29,7 @@ class TcpConnectScannerTest {
                 address = server.inetAddress,
                 startPort = server.localPort,
                 endPort = server.localPort,
-                timeoutMs = 500
+                settings = TcpScanSettings.preset(TcpScanMode.BALANCED).copy(timeoutMs = 500, maxRetries = 0)
             ) { progress, result ->
                 progressCallbacks.incrementAndGet()
                 assertEquals(1, progress.completed)
@@ -51,7 +53,7 @@ class TcpConnectScannerTest {
                 address = InetAddress.getLoopbackAddress(),
                 startPort = first,
                 endPort = last,
-                timeoutMs = 500
+                settings = TcpScanSettings.preset(TcpScanMode.BALANCED).copy(timeoutMs = 500, maxRetries = 0)
             )
 
             assertEquals(3, results.size)
@@ -71,7 +73,7 @@ class TcpConnectScannerTest {
             address = InetAddress.getLoopbackAddress(),
             startPort = closedPort,
             endPort = closedPort,
-            timeoutMs = 500
+            settings = TcpScanSettings.preset(TcpScanMode.BALANCED).copy(timeoutMs = 500, maxRetries = 0)
         )
 
         assertEquals(1, results.size)
