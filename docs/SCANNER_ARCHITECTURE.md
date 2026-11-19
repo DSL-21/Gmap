@@ -1,4 +1,4 @@
-# Gmap scanner architecture — 2.6.0
+# Gmap scanner architecture — 2.8.0
 
 ## Product and trust boundary
 
@@ -16,14 +16,26 @@ The Network dashboard reads Android ConnectivityManager and LinkProperties data.
 
 ## TCP Connect scanner
 
-The TCP engine uses non-blocking Java NIO SocketChannel and Selector rather than one thread per port. Adaptive concurrency is strictly capped at 128 outstanding probes, regardless of port-range size or CPU count. Local socket/resource exhaustion reduces the window and triggers backoff; cancellation closes outstanding channels in a finally block.
+The TCP engine uses non-blocking Java NIO SocketChannel and Selector rather than one thread per port. It exposes Gmap-native scan modes:
+
+- Reliable: lower concurrency, longer connection timeout and a larger retry budget.
+- Balanced: default balance of throughput and verification.
+- Performance: higher concurrency with a shorter timeout and one retry.
+- Maximum: up to 128 concurrent probes with a bounded retry budget and adaptive control.
+- Custom: user-selected concurrency, timeout, retry count and adaptive control.
+
+The selected configuration is persisted locally using Android SharedPreferences and is snapshotted when a scan starts. Changing Settings does not mutate a running scan.
+
+Unanswered probes are retried only within the configured retry budget. A TCP refusal is a positive response and remains CLOSED; it is not retried. A port that still does not respond after retries remains FILTERED / NO RESPONSE, never CLOSED. Retry scheduling is fair: a retry cannot indefinitely starve the first attempt for other requested ports. The scan returns exactly one final result per requested port.
+
+Adaptive concurrency evaluates batches of probe outcomes instead of cutting the window for each isolated timeout. Sustained timeout ratios decrease the active window and introduce a short backoff; healthy batches gradually increase it toward the profile's configured maximum. Turning adaptive control off uses the configured maximum directly, while local socket/resource protection remains active.
 
 - Successful TCP connect: OPEN.
 - Explicit connection refusal: CLOSED.
-- No response before deadline: FILTERED.
+- No response after the configured retries: FILTERED.
 - Local permission, routing or I/O failure: ERROR.
 
-A hostname is resolved with `InetAddress.getAllByName()` and every returned IPv4/IPv6 address is scanned independently across ports 1–65535. Results retain the address that produced them, so identical port numbers on different addresses are not collapsed. The maximum controls simultaneous sockets per address scan, not the permitted total number of ports. This is TCP Connect, not raw-packet SYN scanning.
+A hostname is resolved with `InetAddress.getAllByName()` and every returned IPv4/IPv6 address is scanned independently across the requested range. Results retain the address that produced them. This is TCP Connect, not raw-packet SYN scanning; ordinary non-root Android networking restrictions still apply.
 
 ## Service identification
 

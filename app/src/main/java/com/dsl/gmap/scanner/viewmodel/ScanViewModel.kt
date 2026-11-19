@@ -1,12 +1,16 @@
 package com.dsl.gmap.scanner.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
 import com.dsl.gmap.scanner.engine.ServiceDetector
 import com.dsl.gmap.scanner.engine.VulnerabilityIntelligenceEngine
 import com.dsl.gmap.scanner.model.PortState
 import com.dsl.gmap.scanner.model.ScanSessionSummary
+import com.dsl.gmap.scanner.model.TcpScanMode
+import com.dsl.gmap.scanner.model.TcpScanSettings
 import com.dsl.gmap.scanner.model.ScanUiState
 import com.dsl.gmap.scanner.model.VulnerabilityAssessment
 import com.dsl.gmap.scanner.validation.PortRangeParser
@@ -22,11 +26,15 @@ import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
-class ScanViewModel(
+class ScanViewModel @JvmOverloads constructor(
+    application: Application,
     private val scanner: TcpConnectScanner = TcpConnectScanner(),
     private val serviceDetector: ServiceDetector = ServiceDetector(),
     private val vulnerabilityEngine: VulnerabilityIntelligenceEngine = VulnerabilityIntelligenceEngine()
-) : ViewModel() {
+) : AndroidViewModel(application) {
+
+    private val settingsPreferences = application.getSharedPreferences(SCAN_SETTINGS_PREFS, Context.MODE_PRIVATE)
+
 
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
@@ -34,8 +42,8 @@ class ScanViewModel(
     private val _history = MutableStateFlow<List<ScanSessionSummary>>(emptyList())
     val history: StateFlow<List<ScanSessionSummary>> = _history.asStateFlow()
 
-    private val _timeoutMs = MutableStateFlow(DEFAULT_TIMEOUT_MS)
-    val timeoutMs: StateFlow<Int> = _timeoutMs.asStateFlow()
+    private val _scanSettings = MutableStateFlow(loadScanSettings())
+    val scanSettings: StateFlow<TcpScanSettings> = _scanSettings.asStateFlow()
 
     private val _onlineIntelligenceEnabled = MutableStateFlow(true)
     val onlineIntelligenceEnabled: StateFlow<Boolean> = _onlineIntelligenceEnabled.asStateFlow()
@@ -53,8 +61,55 @@ class ScanViewModel(
         _prefillTarget.value = ""
     }
 
-    fun setTimeoutMs(value: Int) {
-        if (value in ALLOWED_TIMEOUTS_MS) _timeoutMs.value = value
+    fun setScanMode(mode: TcpScanMode) {
+        val current = _scanSettings.value
+        val next = if (mode == TcpScanMode.CUSTOM) {
+            current.copy(mode = TcpScanMode.CUSTOM)
+        } else {
+            TcpScanSettings.preset(mode)
+        }
+        updateScanSettings(next)
+    }
+
+    fun updateCustomConcurrency(value: Int) {
+        updateScanSettings(_scanSettings.value.copy(mode = TcpScanMode.CUSTOM, maxConcurrentProbes = value))
+    }
+
+    fun updateCustomTimeout(value: Int) {
+        updateScanSettings(_scanSettings.value.copy(mode = TcpScanMode.CUSTOM, timeoutMs = value))
+    }
+
+    fun updateCustomRetries(value: Int) {
+        updateScanSettings(_scanSettings.value.copy(mode = TcpScanMode.CUSTOM, maxRetries = value))
+    }
+
+    fun setAdaptiveConcurrencyEnabled(value: Boolean) {
+        updateScanSettings(_scanSettings.value.copy(mode = TcpScanMode.CUSTOM, adaptiveConcurrency = value))
+    }
+
+    private fun updateScanSettings(settings: TcpScanSettings) {
+        val normalized = settings.normalized()
+        _scanSettings.value = normalized
+        settingsPreferences.edit()
+            .putString(KEY_SCAN_MODE, normalized.mode.name)
+            .putInt(KEY_MAX_CONCURRENCY, normalized.maxConcurrentProbes)
+            .putInt(KEY_SCAN_TIMEOUT, normalized.timeoutMs)
+            .putInt(KEY_SCAN_RETRIES, normalized.maxRetries)
+            .putBoolean(KEY_ADAPTIVE_CONCURRENCY, normalized.adaptiveConcurrency)
+            .apply()
+    }
+
+    private fun loadScanSettings(): TcpScanSettings {
+        val mode = runCatching {
+            TcpScanMode.valueOf(settingsPreferences.getString(KEY_SCAN_MODE, null) ?: TcpScanMode.BALANCED.name)
+        }.getOrDefault(TcpScanMode.BALANCED)
+        val preset = TcpScanSettings.preset(mode)
+        return preset.copy(
+            maxConcurrentProbes = settingsPreferences.getInt(KEY_MAX_CONCURRENCY, preset.maxConcurrentProbes),
+            timeoutMs = settingsPreferences.getInt(KEY_SCAN_TIMEOUT, preset.timeoutMs),
+            maxRetries = settingsPreferences.getInt(KEY_SCAN_RETRIES, preset.maxRetries),
+            adaptiveConcurrency = settingsPreferences.getBoolean(KEY_ADAPTIVE_CONCURRENCY, preset.adaptiveConcurrency)
+        ).normalized()
     }
 
     fun setOnlineIntelligenceEnabled(value: Boolean) {
@@ -83,7 +138,8 @@ class ScanViewModel(
             return
         }
 
-        val selectedTimeoutMs = _timeoutMs.value
+        val selectedScanSettings = _scanSettings.value
+        val selectedTimeoutMs = selectedScanSettings.timeoutMs
         scanJob = viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             _uiState.value = ScanUiState(
@@ -131,7 +187,7 @@ class ScanViewModel(
                         address = address,
                         startPort = portRange.start,
                         endPort = portRange.end,
-                        timeoutMs = selectedTimeoutMs
+                        settings = selectedScanSettings
                     ) { progress, latestResult ->
                         val taggedResult = latestResult.copy(targetAddress = addressLabel)
                         _uiState.update { current ->
@@ -285,8 +341,12 @@ class ScanViewModel(
     }
 
     companion object {
-        const val DEFAULT_TIMEOUT_MS = 1200
+        private const val SCAN_SETTINGS_PREFS = "gmap_tcp_scan_settings"
+        private const val KEY_SCAN_MODE = "mode"
+        private const val KEY_MAX_CONCURRENCY = "max_concurrency"
+        private const val KEY_SCAN_TIMEOUT = "timeout_ms"
+        private const val KEY_SCAN_RETRIES = "max_retries"
+        private const val KEY_ADAPTIVE_CONCURRENCY = "adaptive_concurrency"
         const val MAX_HISTORY_ITEMS = 20
-        val ALLOWED_TIMEOUTS_MS = setOf(500, 1200, 2000, 3500)
     }
 }

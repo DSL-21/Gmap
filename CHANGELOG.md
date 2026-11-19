@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.8.0 — 2026-11-19
+
+### Adaptive TCP scan engine
+- Added Gmap-native Reliable, Balanced, Performance, Maximum and Custom scan modes in Settings.
+- Added on-device persistence for scan mode, maximum concurrency, connection timeout, retry budget and adaptive concurrency preference.
+- Added bounded retry scheduling for unanswered TCP probes. Confirmed connection refusals remain CLOSED and are not retried; ports with no response remain FILTERED after the selected retry budget.
+- Added batch-based adaptive concurrency: the scanner reduces its window when a sample contains sustained timeouts and gradually increases it when responses are healthy.
+- Added fair retry scheduling so retry traffic cannot starve first-pass coverage of the remaining requested ports.
+- Enforced one final result per requested port and added scan-profile model tests.
+
+### Validation note
+- CI validation covers Lint, unit tests and debug APK assembly. Physical-device testing is still required across Wi-Fi, mobile data, filtered networks and different Android devices. No timing profile can guarantee that a remote host or firewall will answer.
+
 ## 2.7.0 — 2026-11-18
 
 ### TCP scan reliability

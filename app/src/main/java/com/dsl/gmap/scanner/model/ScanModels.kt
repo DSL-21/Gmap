@@ -2,6 +2,87 @@ package com.dsl.gmap.scanner.model
 
 enum class PortState { OPEN, CLOSED, FILTERED, ERROR }
 
+/**
+ * User-facing TCP scan behavior. Profiles are Gmap-native presets, not Nmap timing templates.
+ */
+enum class TcpScanMode(
+    val title: String,
+    val description: String
+) {
+    RELIABLE("Reliable", "More time and retries for slower or filtered networks."),
+    BALANCED("Balanced", "A practical balance of speed and result confidence."),
+    PERFORMANCE("Performance", "Higher concurrency for responsive networks."),
+    MAXIMUM("Maximum", "Highest allowed throughput with bounded retries and adaptive protection."),
+    CUSTOM("Custom", "Tune concurrency, timeout, retries and adaptive control yourself.")
+}
+
+/**
+ * TCP scanner tuning captured at scan start; changing Settings never mutates a running scan.
+ */
+data class TcpScanSettings(
+    val mode: TcpScanMode = TcpScanMode.BALANCED,
+    val maxConcurrentProbes: Int = 48,
+    val timeoutMs: Int = 1200,
+    val maxRetries: Int = 2,
+    val adaptiveConcurrency: Boolean = true
+) {
+    val minConcurrentProbes: Int
+        get() = minOf(maxConcurrentProbes, maxOf(4, maxConcurrentProbes / 4))
+
+    fun normalized(): TcpScanSettings = copy(
+        maxConcurrentProbes = maxConcurrentProbes.coerceIn(MIN_CONCURRENCY, MAX_CONCURRENCY),
+        timeoutMs = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+        maxRetries = maxRetries.coerceIn(0, MAX_RETRIES)
+    )
+
+    companion object {
+        const val MIN_CONCURRENCY = 4
+        const val MAX_CONCURRENCY = 128
+        const val MIN_TIMEOUT_MS = 300
+        const val MAX_TIMEOUT_MS = 8000
+        const val MAX_RETRIES = 5
+        const val DEFAULT_TIMEOUT_MS = 1200
+
+        fun preset(mode: TcpScanMode): TcpScanSettings = when (mode) {
+            TcpScanMode.RELIABLE -> TcpScanSettings(
+                mode = mode,
+                maxConcurrentProbes = 24,
+                timeoutMs = 2500,
+                maxRetries = 3,
+                adaptiveConcurrency = true
+            )
+            TcpScanMode.BALANCED -> TcpScanSettings(
+                mode = mode,
+                maxConcurrentProbes = 48,
+                timeoutMs = 1200,
+                maxRetries = 2,
+                adaptiveConcurrency = true
+            )
+            TcpScanMode.PERFORMANCE -> TcpScanSettings(
+                mode = mode,
+                maxConcurrentProbes = 80,
+                timeoutMs = 900,
+                maxRetries = 1,
+                adaptiveConcurrency = true
+            )
+            TcpScanMode.MAXIMUM -> TcpScanSettings(
+                mode = mode,
+                maxConcurrentProbes = 128,
+                timeoutMs = 750,
+                maxRetries = 1,
+                adaptiveConcurrency = true
+            )
+            TcpScanMode.CUSTOM -> TcpScanSettings(
+                mode = mode,
+                maxConcurrentProbes = 64,
+                timeoutMs = DEFAULT_TIMEOUT_MS,
+                maxRetries = 2,
+                adaptiveConcurrency = true
+            )
+        }
+    }
+}
+
 data class PortScanResult(
     val port: Int,
     val state: PortState,
@@ -9,7 +90,8 @@ data class PortScanResult(
     val serviceHint: String? = null,
     val detail: String? = null,
     val fingerprint: ServiceFingerprint? = null,
-    val targetAddress: String? = null
+    val targetAddress: String? = null,
+    val attempts: Int = 1
 )
 
 data class ServiceFingerprint(

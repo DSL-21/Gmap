@@ -1,4 +1,4 @@
-name: Publish Gmap 2.7.0 Release
+name: Publish Gmap 2.8.0 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-7-0
+  group: publish-gmap-2-8-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.7.0
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.7.0')
+    name: Build, test and publish Gmap 2.8.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.8.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,25 +50,26 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.7.0.apk
-          (cd release-assets && sha256sum gmap-2.7.0.apk > gmap-2.7.0.apk.sha256)
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.8.0.apk
+          (cd release-assets && sha256sum gmap-2.8.0.apk > gmap-2.8.0.apk.sha256)
           cat > release-assets/release-notes.md <<'EOF'
-          ## Gmap 2.7.0 — adaptive TCP scanner reliability
+          ## Gmap 2.8.0 — adaptive scan modes and retry engine
 
-          ### Scanner improvements
-          - Resolve hostnames to all returned IPv4 and IPv6 addresses and scan each address independently.
-          - Preserve the target IP on every result, so identical ports on different addresses remain distinguishable.
-          - Aggregate scan progress and result counts across resolved addresses.
-          - Cap selector-managed TCP probing at 32 concurrent sockets and reduce concurrency adaptively on repeated remote timeouts or local socket pressure.
-          - Classify timeout-like connection failures as FILTERED rather than CLOSED; refused connections remain CLOSED and unknown failures remain ERROR.
-          - Add regression coverage ensuring every requested port is represented exactly once.
+          ### Scanner and Settings improvements
+          - Added Reliable, Balanced, Performance, Maximum and Custom TCP scan modes.
+          - Persisted profile and custom tuning settings locally on the device.
+          - Added a bounded retry queue for unanswered TCP probes while preserving CLOSED for explicit connection refusals.
+          - Added batch-based adaptive concurrency with gradual recovery and fair scheduling so retries do not starve first-pass port coverage.
+          - Preserved multi-address DNS scanning and per-address result attribution.
+          - Ensured each requested port receives one final result after its configured retry budget.
+          - Added unit tests for profile ranges and scanner result coverage.
 
           ### UI and documentation
-          - Remove redundant scan-screen disclaimer and instructional copy.
-          - Update scanner architecture documentation and changelog.
+          - Added a TCP Scan Engine section to Settings with profile selection and Custom sliders.
+          - Updated scanner architecture documentation and changelog.
 
           ### Validation and limitations
-          Android Lint, unit tests and debug APK assembly must pass in GitHub Actions before release. Physical-device testing is still required, especially for DNS/CDN targets and IPv6 reachability. The adaptive backoff reduces burst pressure but cannot override server-side filtering, carrier restrictions or transient routing. The previously reported missing port 443 on ibuumerang.com has not yet been independently confirmed as fixed on the original phone and network.
+          Android Lint, unit tests and debug APK assembly must pass in GitHub Actions before release. Physical-device testing is still required across Wi-Fi, mobile data, filtered networks, DNS/CDN targets and IPv6 reachability. Retries and adaptive concurrency improve coverage but cannot force a remote host or firewall to answer.
 
           Gmap performs user-initiated, read-only network checks. Use it only on systems you own or are authorized to assess. TCP Connect scanning is not SYN scanning; non-root Android restrictions still apply. This APK is CI debug-signed, not a production or Play Store package.
           EOF
@@ -76,12 +77,12 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v2.7.0
+          RELEASE_TAG: v2.8.0
         run: |
           gh release create "$RELEASE_TAG" \
-            release-assets/gmap-2.7.0.apk \
-            release-assets/gmap-2.7.0.apk.sha256 \
+            release-assets/gmap-2.8.0.apk \
+            release-assets/gmap-2.8.0.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.7.0 — adaptive TCP scanner reliability" \
+            --title "Gmap 2.8.0 — adaptive TCP scanner reliability" \
             --notes-file release-assets/release-notes.md
