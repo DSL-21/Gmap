@@ -3,6 +3,7 @@ package com.dsl.gmap.scanner.engine
 import com.dsl.gmap.scanner.model.PortScanResult
 import com.dsl.gmap.scanner.model.PortState
 import com.dsl.gmap.scanner.model.ScanProgress
+import com.dsl.gmap.scanner.model.TcpScanSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -18,16 +19,17 @@ import java.net.SocketTimeoutException
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.SocketChannel
+import java.util.ArrayDeque
 import java.util.PriorityQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * High-concurrency rootless TCP Connect scanner.
+ * Rootless TCP Connect scanner with bounded retries and adaptive concurrency.
  *
- * Uses non-blocking SocketChannels multiplexed by a Selector. It does not
- * allocate one thread or coroutine per port. The outstanding-probe window
- * grows as the scan progresses and backs off when the OS reports local
- * socket/file-descriptor exhaustion.
+ * Each requested port receives exactly one final result. Unanswered probes are
+ * retried according to the selected Gmap scan profile and only become FILTERED
+ * after the retry budget is exhausted. The adaptive controller changes its
+ * window from batches of outcomes rather than punishing every single timeout.
  */
 class TcpConnectScanner {
 
@@ -35,17 +37,20 @@ class TcpConnectScanner {
         address: InetAddress,
         startPort: Int,
         endPort: Int,
-        timeoutMs: Int = 1200,
+        settings: TcpScanSettings = TcpScanSettings.preset(com.dsl.gmap.scanner.model.TcpScanMode.BALANCED),
         onProgress: (ScanProgress, PortScanResult) -> Unit = { _, _ -> }
     ): List<PortScanResult> = withContext(Dispatchers.IO) {
         require(startPort in 1..65535) { "Start port must be between 1 and 65535." }
         require(endPort in startPort..65535) { "End port must be between start port and 65535." }
-        require(timeoutMs in 100..30000) { "Timeout must be between 100 and 30000 ms." }
+        val config = settings.normalized()
+        require(config.timeoutMs in 100..30000) { "Connection timeout is outside the supported range." }
 
         val selector = Selector.open()
-        val results = ArrayList<PortScanResult>(endPort - startPort + 1)
-        val deadlines = PriorityQueue<PendingProbe>(compareBy { it.deadlineNanos })
         val total = endPort - startPort + 1
+        val results = ArrayList<PortScanResult>(total)
+        val deadlines = PriorityQueue<PendingProbe>(compareBy { it.deadlineNanos })
+        val retryQueue = ArrayDeque<Int>()
+        val attemptsByPort = IntArray(total)
 
         val scanStartedNanos = System.nanoTime()
         var nextPort = startPort
@@ -56,28 +61,41 @@ class TcpConnectScanner {
         var filteredCount = 0
         var errorCount = 0
 
-        // SocketChannel probes are multiplexed by one Selector, not one thread
-        // per port. Start at the mobile-safe ceiling so low CPU core counts do not
-        // artificially throttle network concurrency; back off immediately on
-        // local socket/file-descriptor pressure.
-        var window = minOf(total, MAX_CONCURRENT_PROBES)
+        // Begin conservatively, then ramp up when a batch of probes is responsive.
+        var window = minOf(total, config.maxConcurrentProbes, INITIAL_CONCURRENT_PROBES)
         var resourceBackoffUntil = 0L
-        var completedSinceGrowth = 0
-        var resourceCooldown = 0
+        var outcomeSampleCount = 0
+        var timeoutSampleCount = 0
 
-        fun registerRemoteTimeout() {
-            // Repeated unanswered probes are a signal to reduce pressure even when
-            // the local device has not exhausted its own sockets. This protects
-            // mobile networks and avoids overwhelming rate-limited remote hosts.
-            window = maxOf(MIN_CONCURRENT_PROBES, window / 2)
-            resourceCooldown = maxOf(resourceCooldown, 512)
-            resourceBackoffUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(100)
+        fun observeProbeOutcome(timedOut: Boolean) {
+            if (!config.adaptiveConcurrency) return
+            outcomeSampleCount++
+            if (timedOut) timeoutSampleCount++
+
+            if (outcomeSampleCount >= ADAPTIVE_SAMPLE_SIZE) {
+                val timeoutRatio = timeoutSampleCount.toFloat() / outcomeSampleCount
+                when {
+                    timeoutRatio >= HIGH_TIMEOUT_RATIO -> {
+                        window = maxOf(config.minConcurrentProbes, (window * 3) / 4)
+                        resourceBackoffUntil = System.nanoTime() +
+                            TimeUnit.MILLISECONDS.toNanos(ADAPTIVE_BACKOFF_MS.toLong())
+                    }
+                    timeoutRatio <= LOW_TIMEOUT_RATIO -> {
+                        window = minOf(
+                            total,
+                            config.maxConcurrentProbes,
+                            window + maxOf(1, window / 4)
+                        )
+                    }
+                }
+                outcomeSampleCount = 0
+                timeoutSampleCount = 0
+            }
         }
 
-        fun record(result: PortScanResult) {
+        fun recordFinal(result: PortScanResult) {
             results.add(result)
             completed++
-
             when (result.state) {
                 PortState.OPEN -> openCount++
                 PortState.CLOSED -> closedCount++
@@ -86,6 +104,8 @@ class TcpConnectScanner {
             }
 
             if (result.state == PortState.OPEN || completed % 16 == 0 || completed == total) {
+                val now = System.nanoTime()
+                val elapsedNanos = (now - scanStartedNanos).coerceAtLeast(1L)
                 onProgress(
                     ScanProgress(
                         completed = completed,
@@ -94,23 +114,37 @@ class TcpConnectScanner {
                         closedCount = closedCount,
                         filteredCount = filteredCount,
                         errorCount = errorCount,
-                        elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - scanStartedNanos),
-                        probesPerSecond = if (System.nanoTime() > scanStartedNanos) {
-                            completed * 1_000_000_000.0 / (System.nanoTime() - scanStartedNanos)
-                        } else 0.0
+                        elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNanos),
+                        probesPerSecond = completed * 1_000_000_000.0 / elapsedNanos
                     ),
                     result
                 )
             }
+        }
 
-            if (resourceCooldown > 0) resourceCooldown--
-            completedSinceGrowth++
-            if (completedSinceGrowth >= 128) {
-                if (resourceCooldown == 0 && window < total) {
-                    val increase = maxOf(64, window / 2)
-                    window = minOf(total, MAX_CONCURRENT_PROBES, window + increase)
+        fun recordAttempt(port: Int, result: PortScanResult) {
+            val attemptCount = attemptsByPort[port - startPort]
+            if (result.state == PortState.FILTERED && attemptCount <= config.maxRetries) {
+                // Only unanswered probes are retried. A refusal is a positive
+                // network response and must remain CLOSED, not be retried.
+                retryQueue.addLast(port)
+            } else {
+                val detail = if (result.state == PortState.FILTERED && attemptCount > 1) {
+                    "${result.detail ?: "No TCP response."} (${attemptCount} attempts)"
+                } else {
+                    result.detail
                 }
-                completedSinceGrowth = 0
+                recordFinal(result.copy(detail = detail, attempts = attemptCount))
+            }
+        }
+
+        fun consumeScheduledPort(port: Int, fromRetryQueue: Boolean) {
+            if (fromRetryQueue) {
+                // The retry is always taken from the head of the queue.
+                if (retryQueue.peekFirst() == port) retryQueue.removeFirst()
+                else retryQueue.remove(port)
+            } else {
+                nextPort++
             }
         }
 
@@ -125,7 +159,7 @@ class TcpConnectScanner {
             try {
                 probe.channel.close()
             } catch (_: IOException) {
-                // The probe is already finished from the scanner's perspective.
+                // Best-effort cleanup.
             }
             inFlight = (inFlight - 1).coerceAtLeast(0)
         }
@@ -136,14 +170,12 @@ class TcpConnectScanner {
                     val message = exception.message.orEmpty()
                     val lowerMessage = message.lowercase()
                     when {
-                        lowerMessage.contains("timed out") || lowerMessage.contains("timeout") -> {
-                            registerRemoteTimeout()
+                        lowerMessage.contains("timed out") || lowerMessage.contains("timeout") ->
                             PortScanResult(
                                 port = port,
                                 state = PortState.FILTERED,
                                 detail = "Connection timed out; the port may be filtered or the host may not respond."
                             )
-                        }
                         lowerMessage.contains("refused") ->
                             PortScanResult(
                                 port = port,
@@ -158,14 +190,11 @@ class TcpConnectScanner {
                             )
                     }
                 }
-                is SocketTimeoutException -> {
-                    registerRemoteTimeout()
-                    PortScanResult(
-                        port = port,
-                        state = PortState.FILTERED,
-                        detail = "Connection timed out; the port may be filtered or the host may not respond."
-                    )
-                }
+                is SocketTimeoutException -> PortScanResult(
+                    port = port,
+                    state = PortState.FILTERED,
+                    detail = "Connection timed out; the port may be filtered or the host may not respond."
+                )
                 is NoRouteToHostException -> PortScanResult(
                     port = port,
                     state = PortState.ERROR,
@@ -180,17 +209,17 @@ class TcpConnectScanner {
         }
 
         try {
-            while (nextPort <= endPort || inFlight > 0) {
+            while (nextPort <= endPort || retryQueue.isNotEmpty() || inFlight > 0) {
                 currentCoroutineContext().ensureActive()
 
-                // Refill the outstanding-probe window.
                 while (
-                    nextPort <= endPort &&
+                    (retryQueue.isNotEmpty() || nextPort <= endPort) &&
                     inFlight < window &&
                     System.nanoTime() >= resourceBackoffUntil
                 ) {
                     currentCoroutineContext().ensureActive()
-                    val port = nextPort
+                    val fromRetryQueue = retryQueue.isNotEmpty()
+                    val port = if (fromRetryQueue) retryQueue.peekFirst() else nextPort
                     var channel: SocketChannel? = null
 
                     try {
@@ -203,8 +232,11 @@ class TcpConnectScanner {
 
                         if (connectedImmediately) {
                             channel.close()
-                            nextPort++
-                            record(
+                            consumeScheduledPort(port, fromRetryQueue)
+                            attemptsByPort[port - startPort]++
+                            observeProbeOutcome(timedOut = false)
+                            recordAttempt(
+                                port,
                                 PortScanResult(
                                     port = port,
                                     state = PortState.OPEN,
@@ -217,14 +249,15 @@ class TcpConnectScanner {
                                 port = port,
                                 channel = channel,
                                 startedAtNanos = startedAt,
-                                deadlineNanos = startedAt + TimeUnit.MILLISECONDS.toNanos(timeoutMs.toLong())
+                                deadlineNanos = startedAt + TimeUnit.MILLISECONDS.toNanos(config.timeoutMs.toLong())
                             )
-                            // Advance only after registration succeeds. If registration
-                            // hits local descriptor pressure, retry this same port.
+                            // Advance only after selector registration succeeds. Local
+                            // descriptor exhaustion retries the same scheduled port.
                             channel.register(selector, SelectionKey.OP_CONNECT, probe)
                             deadlines.add(probe)
                             inFlight++
-                            nextPort++
+                            consumeScheduledPort(port, fromRetryQueue)
+                            attemptsByPort[port - startPort]++
                         }
                     } catch (exception: IOException) {
                         try {
@@ -234,23 +267,27 @@ class TcpConnectScanner {
                         }
 
                         if (isLocalResourceExhaustion(exception)) {
-                            // Do not advance nextPort: retry the same port after backing off.
-                            window = maxOf(8, window / 2)
-                            resourceCooldown = maxOf(resourceCooldown, window)
-                            resourceBackoffUntil = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(250)
+                            window = maxOf(config.minConcurrentProbes, window / 2)
+                            resourceBackoffUntil = System.nanoTime() +
+                                TimeUnit.MILLISECONDS.toNanos(LOCAL_RESOURCE_BACKOFF_MS.toLong())
                             break
                         }
 
-                        nextPort++
-                        record(classifyConnectFailure(port, exception))
+                        consumeScheduledPort(port, fromRetryQueue)
+                        attemptsByPort[port - startPort]++
+                        val result = classifyConnectFailure(port, exception)
+                        observeProbeOutcome(timedOut = result.state == PortState.FILTERED)
+                        recordAttempt(port, result)
                     } catch (exception: SecurityException) {
                         try {
                             channel?.close()
                         } catch (_: IOException) {
                             // Ignore cleanup errors.
                         }
-                        nextPort++
-                        record(
+                        consumeScheduledPort(port, fromRetryQueue)
+                        attemptsByPort[port - startPort]++
+                        recordAttempt(
+                            port,
                             PortScanResult(
                                 port = port,
                                 state = PortState.ERROR,
@@ -260,7 +297,6 @@ class TcpConnectScanner {
                     }
                 }
 
-                // Wait for readiness, but wake regularly for cancellation and deadlines.
                 val now = System.nanoTime()
                 val nextDeadline = deadlines.peek()?.deadlineNanos
                 val untilDeadlineMs = nextDeadline?.let {
@@ -270,20 +306,20 @@ class TcpConnectScanner {
 
                 if (inFlight > 0) {
                     selector.select(waitMs)
-
                     val selected = selector.selectedKeys()
                     val iterator = selected.iterator()
                     while (iterator.hasNext()) {
                         val key = iterator.next()
                         iterator.remove()
-
                         val probe = key.attachment() as? PendingProbe ?: continue
                         if (probe.completed) continue
 
                         try {
                             if (key.isValid && key.isConnectable && probe.channel.finishConnect()) {
                                 closePending(probe)
-                                record(
+                                observeProbeOutcome(timedOut = false)
+                                recordAttempt(
+                                    probe.port,
                                     PortScanResult(
                                         port = probe.port,
                                         state = PortState.OPEN,
@@ -294,10 +330,13 @@ class TcpConnectScanner {
                             }
                         } catch (exception: IOException) {
                             closePending(probe)
-                            record(classifyConnectFailure(probe.port, exception))
+                            val result = classifyConnectFailure(probe.port, exception)
+                            observeProbeOutcome(timedOut = result.state == PortState.FILTERED)
+                            recordAttempt(probe.port, result)
                         } catch (exception: SecurityException) {
                             closePending(probe)
-                            record(
+                            recordAttempt(
+                                probe.port,
                                 PortScanResult(
                                     port = probe.port,
                                     state = PortState.ERROR,
@@ -306,21 +345,24 @@ class TcpConnectScanner {
                             )
                         }
                     }
-                } else if (nextPort <= endPort && System.nanoTime() < resourceBackoffUntil) {
+                } else if (
+                    (retryQueue.isNotEmpty() || nextPort <= endPort) &&
+                    System.nanoTime() < resourceBackoffUntil
+                ) {
                     val sleepMs = TimeUnit.NANOSECONDS.toMillis(
                         (resourceBackoffUntil - System.nanoTime()).coerceAtLeast(1L)
                     ).coerceIn(1L, 50L)
                     Thread.sleep(sleepMs)
                 }
 
-                // Expire silent probes. A timeout is not proof that a port is closed.
                 val expiryNow = System.nanoTime()
                 while (deadlines.peek()?.deadlineNanos?.let { it <= expiryNow } == true) {
                     val probe = deadlines.poll() ?: break
                     if (!probe.completed) {
                         closePending(probe)
-                        registerRemoteTimeout()
-                        record(
+                        observeProbeOutcome(timedOut = true)
+                        recordAttempt(
+                            probe.port,
                             PortScanResult(
                                 port = probe.port,
                                 state = PortState.FILTERED,
@@ -331,9 +373,12 @@ class TcpConnectScanner {
                 }
             }
 
+            // One and only one final row per requested port, even when retries occurred.
+            check(results.size == total) {
+                "Scanner completed with ${results.size} results for $total requested ports."
+            }
             results.sortedBy { it.port }
         } finally {
-            // Closing all pending channels ensures cancellation does not leave sockets behind.
             try {
                 selector.keys().toList().forEach { key ->
                     try {
@@ -350,10 +395,7 @@ class TcpConnectScanner {
     }
 
     private fun isLocalResourceExhaustion(exception: IOException): Boolean {
-        // BindException can indicate exhaustion of the ephemeral local port
-        // range during a high-concurrency connect scan.
         if (exception is BindException) return true
-
         val message = exception.message.orEmpty().lowercase()
         return message.contains("too many open files") ||
             message.contains("emfile") ||
@@ -397,8 +439,13 @@ class TcpConnectScanner {
         val deadlineNanos: Long,
         var completed: Boolean = false
     )
+
     companion object {
-        const val MIN_CONCURRENT_PROBES = 4
-        const val MAX_CONCURRENT_PROBES = 32
+        const val INITIAL_CONCURRENT_PROBES = 32
+        const val ADAPTIVE_SAMPLE_SIZE = 32
+        const val HIGH_TIMEOUT_RATIO = 0.50f
+        const val LOW_TIMEOUT_RATIO = 0.125f
+        const val ADAPTIVE_BACKOFF_MS = 100
+        const val LOCAL_RESOURCE_BACKOFF_MS = 250
     }
 }
