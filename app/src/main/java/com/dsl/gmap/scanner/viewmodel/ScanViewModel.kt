@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 
-class ScanViewModel(
+class ScanViewModel @JvmOverloads constructor(
     application: Application,
     private val scanner: TcpConnectScanner = TcpConnectScanner(),
     private val serviceDetector: ServiceDetector = ServiceDetector(),
