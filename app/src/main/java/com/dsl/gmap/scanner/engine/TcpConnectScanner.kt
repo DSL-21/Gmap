@@ -70,6 +70,7 @@ class TcpConnectScanner {
         var resourceBackoffUntil = 0L
         var outcomeSampleCount = 0
         var timeoutSampleCount = 0
+        var newPortsSinceRetry = 0
 
         fun observeProbeOutcome(timedOut: Boolean) {
             if (!config.adaptiveConcurrency) return
@@ -147,8 +148,10 @@ class TcpConnectScanner {
                 // The retry is always taken from the head of the queue.
                 if (retryQueue.peekFirst() == port) retryQueue.removeFirst()
                 else retryQueue.remove(port)
+                newPortsSinceRetry = 0
             } else {
                 nextPort++
+                newPortsSinceRetry++
             }
         }
 
@@ -222,7 +225,8 @@ class TcpConnectScanner {
                     System.nanoTime() >= resourceBackoffUntil
                 ) {
                     currentCoroutineContext().ensureActive()
-                    val fromRetryQueue = retryQueue.isNotEmpty()
+                    val fromRetryQueue = retryQueue.isNotEmpty() &&
+                        (nextPort > endPort || newPortsSinceRetry >= RETRY_FAIRNESS_NEW_PORTS)
                     val port = if (fromRetryQueue) retryQueue.peekFirst() else nextPort
                     var channel: SocketChannel? = null
 
@@ -446,6 +450,7 @@ class TcpConnectScanner {
 
     companion object {
         const val INITIAL_CONCURRENT_PROBES = 32
+        const val RETRY_FAIRNESS_NEW_PORTS = 16
         const val ADAPTIVE_SAMPLE_SIZE = 32
         const val HIGH_TIMEOUT_RATIO = 0.50f
         const val LOW_TIMEOUT_RATIO = 0.125f
