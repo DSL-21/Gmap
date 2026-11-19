@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dsl.gmap.scanner.model.PortScanResult
 import com.dsl.gmap.scanner.model.ScanSessionSummary
+import com.dsl.gmap.scanner.model.TcpScanMode
 import com.dsl.gmap.scanner.model.VulnerabilityFinding
 import com.dsl.gmap.scanner.viewmodel.ScanViewModel
 import com.dsl.gmap.web.WebAuditViewModel
@@ -312,7 +314,7 @@ private fun NetworkInfoRow(label: String, value: String) {
 @Composable
 fun ScanScreen(viewModel: ScanViewModel) {
     val state by viewModel.uiState.collectAsState()
-    val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val scanSettings by viewModel.scanSettings.collectAsState()
     val prefillTarget by viewModel.prefillTarget.collectAsState()
     // Scan inputs are ephemeral and are not persisted.
     var target by remember { mutableStateOf("") }
@@ -388,7 +390,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
         }
 
         Text(
-            "Connection timeout: ${timeoutMs} ms (change in Settings)",
+            "Mode: ${scanSettings.mode.title} • up to ${scanSettings.maxConcurrentProbes} probes • ${scanSettings.timeoutMs} ms timeout • ${scanSettings.maxRetries} retries",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -705,40 +707,122 @@ private fun HistorySessionCard(session: ScanSessionSummary) {
 
 @Composable
 fun SettingsScreen(viewModel: ScanViewModel, webAuditViewModel: WebAuditViewModel) {
-    val timeoutMs by viewModel.timeoutMs.collectAsState()
+    val scanSettings by viewModel.scanSettings.collectAsState()
     val onlineIntelligenceEnabled by viewModel.onlineIntelligenceEnabled.collectAsState()
     val webOnlineIntelligenceEnabled by webAuditViewModel.onlineIntelligenceEnabled.collectAsState()
-    val options = listOf(500, 1200, 2000, 3500)
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("SCAN TIMEOUT", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-        Text("TCP connection wait", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("TCP SCAN ENGINE", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+        Text("Scan behavior", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "Choose how long each connection attempt may wait.",
+            "Choose how Gmap balances scan speed, connection timeouts and verification retries. Settings are saved on this device and apply to the next scan.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
 
-        options.chunked(2).forEach { rowOptions ->
+        TcpScanMode.values().toList().chunked(2).forEach { modeRow ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                rowOptions.forEach { option ->
-                    val label = if (option < 1000) "${option} ms" else "${option / 1000.0}s"
-                    if (timeoutMs == option) {
-                        Button(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
-                            Text(label)
-                        }
-                    } else {
-                        OutlinedButton(onClick = { viewModel.setTimeoutMs(option) }, modifier = Modifier.weight(1f)) {
-                            Text(label)
+                modeRow.forEach { mode ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (scanSettings.mode == mode) {
+                            Button(
+                                onClick = { viewModel.setScanMode(mode) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(mode.title, maxLines = 1)
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { viewModel.setScanMode(mode) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(mode.title, maxLines = 1)
+                            }
                         }
                     }
                 }
-                if (rowOptions.size == 1) Spacer(Modifier.weight(1f))
+                if (modeRow.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(scanSettings.mode.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(scanSettings.mode.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                Text("Maximum concurrency: ${scanSettings.maxConcurrentProbes}", style = MaterialTheme.typography.bodyMedium)
+                Text("Connection timeout: ${scanSettings.timeoutMs} ms", style = MaterialTheme.typography.bodyMedium)
+                Text("Retries for no response: ${scanSettings.maxRetries}", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Adaptive concurrency: ${if (scanSettings.adaptiveConcurrency) "On" else "Off"}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+
+        if (scanSettings.mode == TcpScanMode.CUSTOM) {
+            Text("CUSTOM PARAMETERS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Maximum concurrent probes: ${scanSettings.maxConcurrentProbes}", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = scanSettings.maxConcurrentProbes.toFloat(),
+                    onValueChange = { viewModel.updateCustomConcurrency(it.toInt()) },
+                    valueRange = 4f..128f,
+                    steps = 30
+                )
+                Text("Controls how many TCP connection attempts can be in flight at once.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Connection timeout: ${scanSettings.timeoutMs} ms", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = scanSettings.timeoutMs.toFloat(),
+                    onValueChange = { viewModel.updateCustomTimeout(it.toInt()) },
+                    valueRange = 300f..8000f,
+                    steps = 76
+                )
+                Text("How long each unanswered connection attempt is allowed to wait.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Retries for no response: ${scanSettings.maxRetries}", fontWeight = FontWeight.SemiBold)
+                Slider(
+                    value = scanSettings.maxRetries.toFloat(),
+                    onValueChange = { viewModel.updateCustomRetries(it.toInt()) },
+                    valueRange = 0f..5f,
+                    steps = 4
+                )
+                Text("Retries are only used for unanswered/filtered probes, not confirmed closed ports.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("ADAPTIVE CONCURRENCY", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Automatically adjusts concurrency based on batches of responsive and timed-out probes.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(
+                    checked = scanSettings.adaptiveConcurrency,
+                    onCheckedChange = viewModel::setAdaptiveConcurrencyEnabled
+                )
+            }
+        }
+
+        Text(
+            "Every requested port gets one final result. Ports that do not answer remain FILTERED / NO RESPONSE after the selected retry budget; they are never silently treated as closed.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall
+        )
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -765,7 +849,7 @@ fun SettingsScreen(viewModel: ScanViewModel, webAuditViewModel: WebAuditViewMode
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         Text("PRIVACY", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
-            "Scan history and findings stay in RAM only. Online lookups send product CPEs and CVE IDs to public providers, never target IP addresses or hostnames. No scan database, report files, analytics or cloud sync are used.",
+            "Scan history and findings stay in RAM only. TCP scan mode preferences are stored locally on this device. Online lookups send product CPEs and CVE IDs to public providers, never target IP addresses or hostnames. No scan database, report files, analytics or cloud sync are used.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
