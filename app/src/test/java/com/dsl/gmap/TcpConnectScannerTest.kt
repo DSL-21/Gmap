@@ -40,6 +40,7 @@ class TcpConnectScannerTest {
             assertEquals(1, results.size)
             assertEquals(server.localPort, results.single().port)
             assertEquals(PortState.OPEN, results.single().state)
+            assertEquals(1, results.single().attempts)
             assertTrue(progressCallbacks.get() >= 1)
         }
     }
@@ -78,5 +79,6 @@ class TcpConnectScannerTest {
 
         assertEquals(1, results.size)
         assertEquals(PortState.CLOSED, results.single().state)
+        assertEquals(1, results.single().attempts)
     }
 }
