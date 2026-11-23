@@ -322,7 +322,7 @@ class WebAuditEngineTest {
             }
             worker.start()
 
-            val job = async {
+            val job = async(kotlinx.coroutines.Dispatchers.IO) {
                 WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/slow")
             }
             job.invokeOnCompletion { failure ->
