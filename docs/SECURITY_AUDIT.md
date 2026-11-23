@@ -1,12 +1,24 @@
-# Gmap 2.5.0 — source security audit
+# Gmap 2.11.0 — source security review
 
-**Audit date:** 2026-11-16  
-**Reviewed ref:** main before the 2.5.0 hardening commit  
-**Audit type:** source/configuration review plus automated CI checks; not an independent penetration test.
+**Review date:** 2026-11-23  
+**Reviewed ref:** main during the 2.11.0 Web Audit hardening  
+**Review type:** focused source/configuration review plus regression tests and CI validation; not an independent penetration test or formal security certification.
 
 ## Scope
 
 Reviewed the Android manifest and permissions, app lifecycle and Compose entry points, input validation, TCP/UDP/local-network scanners, protocol fingerprinting, Web audit, CVE data retrieval and parsing, result/history handling, Gradle configuration, resources, and GitHub Actions workflows.
+
+## Web Audit changes in 2.11.0
+
+| Area | Previous risk / limitation | 2.11.0 change |
+|---|---|---|
+| DNS rebinding | DNS addresses shown in results were resolved separately from the connection actually opened by HttpURLConnection. | OkHttp uses a per-audit custom DNS resolver that returns the already-resolved address list. The original hostname remains in the URL for Host, SNI and hostname verification. The client bypasses system proxy resolution. |
+| Request cancellation | Blocking URLConnection calls could continue until timeout after the coroutine was cancelled. | Asynchronous OkHttp calls are connected to coroutine cancellation and active calls are cancelled immediately. |
+| Redirect privacy | Redirects and request normalization needed a single enforced rule for query and fragment removal. | Raw path components are preserved; query strings and fragments are removed before initial and redirect requests. Same-host/port and no HTTPS downgrade constraints remain. |
+| Resource checks | runCatching around public resource probes could swallow coroutine cancellation. | Cancellation is explicitly rethrown; only ordinary I/O failures become NO RESPONSE. |
+| Resource limits | Repeated requests and GET samples needed a strict total ceiling. | Added 8-second per-call timeout, 45-second scan deadline, 18-request audit budget and 256-byte body sample cap. |
+| Finding quality | Generic CSP string matching and missing document headers could flag JSON APIs. | CSP is parsed by directive; HTML-only controls are checked only on HTML/XHTML responses. CORS reflection is medium severity and explicitly not proof of data exposure. |
+| Result triage | Findings had no stable machine-readable identifier or confidence context. | Findings now include stable IDs, categories, confidence estimates, endpoint and request method. |
 
 ## Findings and changes in 2.5.0
 
@@ -36,16 +48,17 @@ Reviewed the Android manifest and permissions, app lifecycle and Compose entry p
 
 ## Remaining limitations and risks
 
-1. **DNS rebinding in Web audit:** the Web module uses the platform URL connection stack and does not pin DNS results to the actual socket connection. A user who manually audits an attacker-controlled hostname could theoretically encounter DNS rebinding. This is documented and remains an item for a dedicated DNS-pinned HTTP/TLS implementation.
+1. **DNS and network environment:** DNS is pinned for direct OkHttp connections within one Web audit. System proxies are deliberately bypassed because they would resolve the hostname independently. VPNs, transparent network middleboxes, DNS changes between separate audits and platform routing behavior remain outside the app's control.
 2. **Cleartext HTTP:** usesCleartextTraffic is enabled because user-selected HTTP endpoints are a supported audit target. HTTP requests are unencrypted. The UI warns about this; users must not include credentials or sensitive query parameters.
 3. **Local-network access:** on Android versions before the newer local-network permission model, an app with INTERNET permission can generally reach networks permitted by the OS. Gmap does not run network scans in the background, but users should still only specify authorized targets.
 4. **Device validation:** unit tests and CI cannot validate all phone models, OEM network stacks, thermal throttling, battery impact or every router response. Physical-device testing remains required.
 5. **Release signing:** CI releases are debug-signed. Production distribution requires a maintainer-managed release keystore and protected signing secrets.
-6. **Audit assurance:** this is a focused source/configuration audit, not a formal security certification, fuzzing campaign or independent penetration test. No claim of zero vulnerabilities is made.
+6. **Audit assurance:** this is a focused source/configuration review with regression tests, not a formal security certification, fuzzing campaign or independent penetration test. No claim of zero vulnerabilities is made.
 
-## Validation planned for CI
+## Validation required in CI and on devices
 
 - Android Lint (lintDebug)
 - Kotlin/JVM unit tests (testDebugUnitTest)
 - Debug APK assembly (assembleDebug)
-- Regression tests for TCP concurrency, cookie-value redaction, query suppression and redirect port isolation.
+- Web regressions for pinned DNS, query suppression, raw path preservation, CORS evidence classification, resource handling and prompt cancellation.
+- Physical-device verification of Android 17 local-network permission prompts, TLS/SNI/hostname verification, DNS behavior on Wi-Fi and mobile data, and cancellation under slow network conditions.

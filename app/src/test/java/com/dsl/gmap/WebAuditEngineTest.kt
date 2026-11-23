@@ -3,12 +3,17 @@ package com.dsl.gmap
 import com.dsl.gmap.web.FindingSeverity
 import com.dsl.gmap.web.WebAuditEngine
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class WebAuditEngineTest {
 
@@ -18,7 +23,7 @@ class WebAuditEngineTest {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
             val worker = Thread {
-                repeat(5) {
+                repeat(7) {
                     server.accept().use { socket ->
                         socket.soTimeout = 3000
                         val request = readRequest(socket.getInputStream())
@@ -49,7 +54,7 @@ class WebAuditEngineTest {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { redirectTarget ->
             ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { origin ->
                 val worker = Thread {
-                    repeat(5) { index ->
+                    repeat(7) { index ->
                         origin.accept().use { socket ->
                             socket.soTimeout = 3000
                             readRequest(socket.getInputStream())
@@ -76,7 +81,7 @@ class WebAuditEngineTest {
     fun checksHttpHeadersAndResourcePathsWithoutDownloadingPageBody() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val worker = Thread {
-                repeat(5) {
+                repeat(7) {
                     server.accept().use { socket ->
                         socket.soTimeout = 3000
                         val request = readRequest(socket.getInputStream())
@@ -98,7 +103,7 @@ class WebAuditEngineTest {
             assertTrue(result.findings.any { it.title == "HTTP without TLS" && it.severity == FindingSeverity.MEDIUM })
             assertTrue(result.findings.any { it.title == "Content Security Policy missing" })
             assertTrue(result.findings.any { it.title == "Server header disclosed" })
-            assertEquals(4, result.resources.size)
+            assertEquals(6, result.resources.size)
             assertEquals(1, result.redirectChain.size)
         }
     }
@@ -107,7 +112,7 @@ class WebAuditEngineTest {
     fun fallsBackToGetAndDetectsCredentialedCorsReflection() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val worker = Thread {
-                repeat(6) { index ->
+                repeat(8) { index ->
                     server.accept().use { socket ->
                         socket.soTimeout = 3000
                         val request = readRequest(socket.getInputStream())
@@ -133,7 +138,7 @@ class WebAuditEngineTest {
             assertTrue(result.usedGetFallback)
             assertEquals(200, result.httpStatus)
             assertTrue(result.findings.any {
-                it.title == "Credentialed CORS origin reflection" && it.severity == FindingSeverity.HIGH
+                it.title == "Credentialed CORS origin reflection" && it.severity == FindingSeverity.MEDIUM
             })
         }
     }
@@ -142,7 +147,7 @@ class WebAuditEngineTest {
     fun identifiesExposedGitHeadMetadata() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val worker = Thread {
-                repeat(6) {
+                repeat(8) {
                     server.accept().use { socket ->
                         socket.soTimeout = 3000
                         val request = readRequest(socket.getInputStream())
@@ -172,7 +177,7 @@ class WebAuditEngineTest {
     fun followsSameHostRedirects() = runBlocking {
         ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
             val worker = Thread {
-                repeat(6) { index ->
+                repeat(8) { index ->
                     server.accept().use { socket ->
                         socket.soTimeout = 3000
                         val request = readRequest(socket.getInputStream())
@@ -198,6 +203,188 @@ class WebAuditEngineTest {
         runBlocking {
             WebAuditEngine().scan("ftp://example.com")
             Unit
+        }
+    }
+
+
+    @Test
+    fun hostnameRequestsUseOnlyThePinnedDnsAnswer() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val worker = Thread {
+                repeat(7) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        requests += readRequest(socket.getInputStream())
+                        respond(socket, 404, emptyList())
+                    }
+                }
+            }
+            worker.start()
+
+            val resolverCalls = AtomicInteger()
+            val pinnedAddress = InetAddress.getLoopbackAddress()
+            val engine = WebAuditEngine(WebHostResolver { host ->
+                assertEquals("pinned.test", host)
+                resolverCalls.incrementAndGet()
+                listOf(pinnedAddress)
+            })
+            val result = engine.scan("http://pinned.test:${server.localPort}/")
+            worker.join(4000)
+
+            assertEquals(1, resolverCalls.get())
+            assertEquals(listOf(pinnedAddress.hostAddress), result.resolvedAddresses)
+            assertEquals(7, result.requestCount)
+            assertTrue(requests.first().contains("Host: pinned.test"))
+            assertTrue(requests.size == 7)
+        }
+    }
+
+    @Test
+    fun keepsEncodedPathEscapesAndDropsInitialQuery() = runBlocking {
+        val secret = "DO_NOT_SEND_QUERY_VALUE"
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val worker = Thread {
+                repeat(7) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        requests += readRequest(socket.getInputStream())
+                        respond(socket, 404, emptyList())
+                    }
+                }
+            }
+            worker.start()
+
+            val result = WebAuditEngine().scan(
+                "http://127.0.0.1:${server.localPort}/encoded%2Fsegment?token=$secret"
+            )
+            worker.join(4000)
+
+            assertTrue(requests.first().contains(" /encoded%2Fsegment HTTP/"))
+            assertTrue(requests.none { it.contains(secret) })
+            assertTrue(!result.url.contains(secret))
+        }
+    }
+
+    @Test
+    fun stripsQueryFromSameHostRedirectBeforeFollowing() = runBlocking {
+        val secret = "REDIRECT_QUERY_SECRET"
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val worker = Thread {
+                repeat(8) { index ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        val request = readRequest(socket.getInputStream())
+                        requests += request
+                        if (index == 0) {
+                            respond(socket, 302, listOf("Location: /next?token=$secret"))
+                        } else {
+                            respond(socket, if (index == 1) 200 else 404, emptyList())
+                        }
+                    }
+                }
+            }
+            worker.start()
+
+            val result = WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/start")
+            worker.join(4000)
+
+            assertEquals(2, result.redirectChain.size)
+            assertTrue(requests.any { it.contains(" /next HTTP/") })
+            assertTrue(requests.none { it.contains(secret) })
+            assertTrue(result.redirectChain.none { it.contains(secret) })
+        }
+    }
+
+    @Test
+    fun cancellingAuditCancelsTheActiveHttpCallPromptly() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val accepted = CountDownLatch(1)
+            val worker = Thread {
+                runCatching {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        readRequest(socket.getInputStream())
+                        accepted.countDown()
+                        Thread.sleep(5000)
+                    }
+                }
+            }
+            worker.start()
+
+            val job = async {
+                WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/slow")
+            }
+            assertTrue(accepted.await(2, TimeUnit.SECONDS))
+            val started = System.nanoTime()
+            job.cancelAndJoin()
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+
+            assertTrue("Cancellation took ${elapsedMs}ms", elapsedMs < 1000)
+            worker.interrupt()
+            worker.join(1000)
+        }
+    }
+
+
+    @Test
+    fun doesNotApplyHtmlDocumentHeaderChecksToJsonApis() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val worker = Thread {
+                repeat(7) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        readRequest(socket.getInputStream())
+                        respond(socket, 200, listOf("Content-Type: application/json"))
+                    }
+                }
+            }
+            worker.start()
+
+            val result = WebAuditEngine().scan("http://127.0.0.1:" + server.localPort + "/api/status")
+            worker.join(4000)
+
+            assertTrue(result.findings.none {
+                it.title in setOf(
+                    "Content Security Policy missing",
+                    "Clickjacking protection not detected",
+                    "Referrer Policy not set",
+                    "Permissions Policy not set",
+                    "Cross-Origin-Opener-Policy not set"
+                )
+            })
+        }
+    }
+
+    @Test
+    fun unsafeInlineInStyleOnlyDirectiveDoesNotTriggerScriptCspFinding() = runBlocking {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            val worker = Thread {
+                repeat(7) {
+                    server.accept().use { socket ->
+                        socket.soTimeout = 3000
+                        readRequest(socket.getInputStream())
+                        respond(
+                            socket,
+                            200,
+                            listOf(
+                                "Content-Type: text/html; charset=utf-8",
+                                "Content-Security-Policy: default-src 'self'; style-src 'unsafe-inline'"
+                            )
+                        )
+                    }
+                }
+            }
+            worker.start()
+
+            val result = WebAuditEngine().scan("http://127.0.0.1:" + server.localPort + "/")
+            worker.join(4000)
+
+            assertTrue(result.findings.none {
+                it.title == "CSP allows unsafe-inline"
+            })
         }
     }
 

@@ -1,4 +1,4 @@
-# Gmap scanner architecture — 2.10.0
+# Gmap scanner architecture — 2.11.0
 
 ## Product and trust boundary
 
@@ -57,18 +57,19 @@ Final states are OPEN, CLOSED, OPEN_FILTERED, ERROR and NOT_TESTED. A UDP reply 
 
 ## Web audit
 
-The Web audit accepts HTTP or HTTPS URLs, uses bounded connection/read timeouts, disables automatic redirect following and limits public resource checks to a fixed set of paths. A GET fallback is bounded to a 256-byte sample and is used only for the exposed Git HEAD check. Redirects must retain the hostname and effective port; a same-host HTTP-to-default-HTTPS upgrade is allowed, but HTTPS downgrade and arbitrary port pivots are rejected.
+The Web audit uses OkHttp 5.5.1 with a DNS resolver scoped to the originally entered hostname. The hostname is resolved once at the start of an audit; every connection made by that audit receives only that resolved IP address set. The URL continues to contain the original hostname, so HTTP Host routing, TLS SNI and normal certificate hostname verification are retained. The client explicitly bypasses system proxies because a proxy would perform its own DNS resolution and bypass the pin.
 
-Before retaining response metadata, the audit:
-- Redacts Set-Cookie values while retaining cookie names and security attributes.
-- Omits query strings and fragments from the initial audit URL and redirect destinations.
-- Caps the number and length of response headers and values.
+The HTTP client disables automatic redirect following, cookies and implicit connection retries. It sends unauthenticated HEAD requests and uses a bounded GET fallback only when the main endpoint rejects HEAD with 405 or 501. The one permitted redirect boundary is the same original host and effective port, except a same-host HTTP-to-default-HTTPS upgrade. HTTPS downgrade, cross-host redirect and arbitrary port pivot are rejected. Query strings and fragments are removed from both the initial target and redirect destinations before a request is created. Raw path escapes such as %2F are preserved.
 
-HTTP support remains enabled because it is an explicit feature. HTTP has no transport encryption. The app displays a warning, and the audit does not accept embedded URL credentials or submit user authentication.
+Requests are asynchronous and tied to coroutine cancellation. The active OkHttp call is cancelled when the user stops the audit. Per-call connect/read/write/call timeouts, a 45-second overall scan deadline, a 18-request request budget and a 256-byte response sample ceiling bound resource use. Public resource discovery is a fixed list: /.well-known/security.txt, /robots.txt, /openapi.json, /swagger-ui/index.html, /sitemap.xml and /.git/HEAD. Only Git HEAD is read with a bounded sample. Cancellation exceptions are rethrown, not converted into a missing-resource status.
 
-### Known Web-audit limitation
+The audit reports HTTP status, response headers, DNS answers actually pinned to the request, TLS protocol/cipher, certificate subject, issuer, expiry and SANs where available. It redacts cookie values, omits query strings, and keeps result history in memory. It does not load page JavaScript, submit forms, authenticate, brute-force filenames or attempt exploits.
 
-The current implementation uses the platform HttpURLConnection stack and does not pin a DNS answer to the actual socket connection. A hostname controlled by an attacker could theoretically change its DNS answer between resolution and connection (DNS rebinding). This is not triggered in the background: the user must manually submit a hostname in the Web audit. Do not use the Web audit on domains you do not trust. A future hardening step should replace this path with a DNS-pinned HTTP/TLS client that preserves SNI and hostname verification.
+Security checks include HSTS, X-Content-Type-Options, CSP, clickjacking protection, Referrer Policy, Permissions Policy, COOP, cookie attributes, synthetic-origin CORS behavior, server/software disclosure, public API documentation and exposed Git HEAD. Browser-document controls such as CSP, clickjacking, Referrer Policy, Permissions Policy and COOP are evaluated only when the response content type is HTML/XHTML. CSP script policy is parsed by directive to avoid flagging unrelated style-src values. Credentialed CORS origin reflection is medium severity because a synthetic unauthenticated response does not by itself prove that sensitive data is readable.
+
+Each finding has a stable ID, category, severity, confidence estimate, endpoint, evidence and remediation guidance. Confidence is a triage aid, not a mathematical probability or proof of exploitability. Online CPE/CVE enrichment is a separate optional step and remains version/banner-dependent.
+
+HTTP support remains enabled because it is an explicit feature. HTTP has no transport encryption. The app displays a warning, and no embedded URL credentials, cookies or user authentication are sent. DNS pinning protects each audit's direct connections; it does not validate the security of the user's network, transparent middleboxes or DNS behavior between separate audits.
 
 ## Vulnerability intelligence
 

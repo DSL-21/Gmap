@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.Inet6Address
 import java.net.InetAddress
 
@@ -55,6 +57,31 @@ object LocalNetworkAccess {
 
         val ipv6 = address as? Inet6Address
         return ipv6?.address?.firstOrNull()?.let { (it.toInt() and 0xfe) == 0xfc } == true
+    }
+
+
+    /**
+     * Performs DNS resolution off the main thread so a fully qualified hostname that points
+     * at a private/LAN address can trigger Android 17's local-network permission gate too.
+     */
+    suspend fun targetRequiresPermissionAfterDns(target: String): Boolean = withContext(Dispatchers.IO) {
+        if (targetRequiresPermission(target)) return@withContext true
+        val raw = target.trim()
+        if (raw.isEmpty()) return@withContext false
+        val candidate = if (raw.contains("://")) raw else "https://$raw"
+        val host = runCatching { java.net.URI(candidate).host }.getOrNull()
+            ?.removePrefix("[")?.removeSuffix("]")
+            ?.substringBefore('%')
+            ?: return@withContext false
+        runCatching {
+            InetAddress.getAllByName(host).any { address ->
+                address.isAnyLocalAddress || address.isLoopbackAddress ||
+                    address.isLinkLocalAddress || address.isSiteLocalAddress ||
+                    ((address as? Inet6Address)?.address?.firstOrNull()?.let {
+                        (it.toInt() and 0xfe) == 0xfc
+                    } == true)
+            }
+        }.getOrDefault(false)
     }
 
     private val IPV4_PATTERN = Regex("""^\d{1,3}(?:\.\d{1,3}){3}$""")

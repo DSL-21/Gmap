@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.11.0 — 2026-11-23
+
+### Web Audit security and reliability overhaul
+- Replaced HttpURLConnection with OkHttp 5.5.1 and a custom pinned DNS resolver. The selected IP answer set is reused for every request while the original hostname remains in the URL for HTTP Host, TLS SNI and platform certificate hostname verification.
+- Disabled automatic redirects, system proxy use, cookies and implicit connection retries in the Web audit client. Redirects remain same-host, do not downgrade HTTPS and cannot pivot to arbitrary ports.
+- Removed query strings and fragments from both the original target and every redirect before a request is sent. Preserved already-escaped raw path segments instead of double-encoding percent sequences.
+- Added cancellable asynchronous HTTP calls. Cancelling the audit now cancels the active OkHttp call instead of waiting for connect/read timeouts.
+- Added per-call timeouts, a 45-second scan deadline, a 18-request total budget and a 256-byte maximum response sample even when a server ignores Range.
+- Fixed cancellation handling in fixed-path public resource checks; cancellation exceptions are rethrown instead of being converted into a missing-resource result.
+- Expanded fixed public metadata checks to /.well-known/security.txt, /robots.txt, /openapi.json, /swagger-ui/index.html, /sitemap.xml and /.git/HEAD. Only the Git HEAD check reads a bounded body sample.
+- Added TLS protocol version and request count to the result.
+- Added stable finding IDs, categories, confidence estimates and endpoint context. Credentialed CORS origin reflection is now medium severity because a synthetic unauthenticated probe does not prove sensitive data exposure.
+- Reduced browser-header false positives by evaluating CSP, clickjacking, Referrer Policy, Permissions Policy and COOP only on HTML/XHTML responses; CSP script directives are parsed instead of searched as an undifferentiated string.
+- Added a Stop control, asynchronous local-network DNS permission preflight and regression tests for pinned DNS, escaped paths, redirect-query stripping and prompt cancellation.
+
+### Dependency and validation notes
+- Pinned OkHttp to 5.5.1. The upstream release includes a certificate-blocklist update; see the OkHttp 5.5.1 change log.
+- CI must pass Android Lint, the unit-test suite and debug APK assembly before the release is published. Device-level validation remains necessary for Android 17 local-network permission behavior, OEM TLS providers, mobile networks and real-world servers.
+- The Web audit remains a safe, unauthenticated configuration and public-metadata check. It is not a web application penetration test, does not execute JavaScript, submit forms, brute-force paths or exploit vulnerabilities.
+
 ## 2.10.0 — 2026-11-23
 
 ### Rebuilt rootless UDP engine

@@ -8,6 +8,7 @@ import com.dsl.gmap.scanner.model.ServiceFingerprint
 import com.dsl.gmap.scanner.model.VulnerabilityAssessment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,6 +133,15 @@ class WebAuditViewModel(
                     )
                 }
                 _history.update { (listOf(result) + it).take(MAX_HISTORY_ITEMS) }
+            } catch (timeout: TimeoutCancellationException) {
+                _uiState.update {
+                    it.copy(
+                        isScanning = false,
+                        isAssessing = false,
+                        statusMessage = "Web audit timed out",
+                        errorMessage = "The Web audit exceeded its maximum allowed duration."
+                    )
+                }
             } catch (cancelled: CancellationException) {
                 _uiState.update {
                     it.copy(isScanning = false, isAssessing = false, statusMessage = "Web audit cancelled")
@@ -146,6 +156,19 @@ class WebAuditViewModel(
                         errorMessage = exception.message ?: "Web audit failed."
                     )
                 }
+            }
+        }
+    }
+
+    fun cancelAudit() {
+        val job = scanJob ?: return
+        if (job.isActive) {
+            job.cancel()
+            _uiState.update {
+                it.copy(
+                    statusMessage = "Cancelling web audit...",
+                    errorMessage = null
+                )
             }
         }
     }

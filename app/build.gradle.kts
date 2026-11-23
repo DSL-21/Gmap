@@ -13,8 +13,8 @@ android {
         minSdk = 26
         // Android 17 local-network access is requested at runtime for LAN scans.
         targetSdk = 37
-        versionCode = 14
-        versionName = "2.10.0"
+        versionCode = 15
+        versionName = "2.11.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -55,6 +55,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
 
     // Retained while the legacy XML resources are phased out.
     implementation(libs.androidx.core.ktx)

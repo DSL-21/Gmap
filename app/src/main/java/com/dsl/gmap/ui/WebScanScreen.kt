@@ -15,10 +15,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
@@ -47,6 +51,7 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
     val uriHandler = LocalUriHandler.current
     var permissionError by remember { mutableStateOf<String?>(null) }
     val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
+    val permissionScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -83,14 +88,16 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
         Button(
             onClick = {
                 val start = { viewModel.startAudit() }
-                if (LocalNetworkAccess.targetRequiresPermission(target)) {
-                    requestLocalNetworkPermission(
-                        { permissionError = null; start() },
-                        { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
-                    )
-                } else {
-                    permissionError = null
-                    start()
+                permissionScope.launch {
+                    if (LocalNetworkAccess.targetRequiresPermissionAfterDns(target)) {
+                        requestLocalNetworkPermission(
+                            { permissionError = null; start() },
+                            { permissionError = "Local network access is required for this target. Enable it in Android app permissions." }
+                        )
+                    } else {
+                        permissionError = null
+                        start()
+                    }
                 }
             },
             enabled = target.isNotBlank() && !isScanning,
@@ -105,6 +112,14 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
         if (isScanning) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             Text(state.statusMessage, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(
+                onClick = viewModel::cancelAudit,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                androidx.compose.material3.Icon(Icons.Default.Stop, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Cancel audit")
+            }
         }
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         permissionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -123,7 +138,9 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
                     Text(audit.url, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("HTTP ${audit.httpStatus}", fontWeight = FontWeight.Bold)
                     Text("DNS: ${audit.resolvedAddresses.joinToString(", ")}")
+                    audit.tlsVersion?.let { Text("TLS version: $it") }
                     audit.tlsCipherSuite?.let { Text("TLS cipher: $it") }
+                    Text("HTTP requests: ${audit.requestCount}")
                     audit.certificateSubject?.let { Text("Certificate: $it") }
                     audit.certificateIssuer?.let { Text("Issuer: $it") }
                     if (audit.certificateSans.isNotEmpty()) {
@@ -220,7 +237,13 @@ fun WebScanScreen(viewModel: com.dsl.gmap.web.WebAuditViewModel) {
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                        Text(
+                            "${finding.id} · ${finding.category.name.replace('_', ' ')} · ${finding.confidence.name} confidence",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
                         Text(finding.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        finding.endpoint?.let { Text("${finding.method} · $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         Text(finding.evidence, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(finding.recommendation, style = MaterialTheme.typography.bodySmall)
                     }

@@ -1,4 +1,4 @@
-# Gmap 2.10.0 — Rootless Android Network Scanner
+# Gmap 2.11.0 — Rootless Android Network Scanner
 
 Gmap is a native Android network scanner and security-audit toolkit built with Kotlin, Jetpack Compose and standard Android networking APIs. It runs without root or a companion computer.
 
@@ -6,11 +6,11 @@ Gmap is a native Android network scanner and security-audit toolkit built with K
 
 Gmap is an explicitly user-operated, read-only network inspection tool. Use it only on devices and networks you own or have permission to assess. TCP concurrency is hard-capped to 128 outstanding probes, local discovery and UDP probing have independent limits, and the Web audit bounds response metadata, redacts cookie values, omits URL query strings and refuses unsafe cross-origin, cross-port or HTTPS-downgrade redirects.
 
-The Web audit supports explicitly entered HTTP URLs for compatibility testing. HTTP is plaintext; do not include credentials or sensitive information in target URLs. See [SECURITY.md](SECURITY.md) and [the security audit](docs/SECURITY_AUDIT.md) for scope and known limitations.
+The Web audit uses a DNS-pinned HTTP client, retains normal TLS SNI and certificate hostname verification, strips query strings from every request and redirect, and cancels active calls when stopped. It uses no cookies, credentials, automatic redirects or system proxy. HTTP remains available for explicit compatibility checks and is plaintext; do not include credentials or sensitive information in target URLs. See [SECURITY.md](SECURITY.md) and [the security audit](docs/SECURITY_AUDIT.md) for scope and known limitations.
 
 ## Modules
 
-Gmap 2.10.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.11.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 ### Network discovery
 
@@ -55,15 +55,17 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 
 ### Web audit
 
-- DNS resolution and HTTP/HTTPS status and response headers.
-- TLS cipher, certificate subject, issuer, expiry and Subject Alternative Names where available.
-- HSTS, CSP, X-Content-Type-Options, clickjacking protection, Referrer-Policy, Permissions-Policy and Cross-Origin-Opener-Policy checks.
+- DNS resolution is pinned to the actual HTTP/TLS connections for the duration of one audit, avoiding a second DNS lookup between display and connection.
+- HTTP/HTTPS status, response headers, redirect chain, TLS version/cipher, certificate subject, issuer, expiry and Subject Alternative Names where available.
+- No automatic redirects, cookies, embedded authentication or system proxy; same-host/port redirect policy and query/fragment stripping are enforced.
+- Active HTTP calls can be cancelled; a scan-wide deadline, per-call timeouts, request budget and bounded response sample limit resource use.
+- HSTS and response-header checks, with CSP directives parsed by policy and browser-document controls evaluated only for HTML/XHTML responses to reduce API false positives.
 - Cookie attribute checks for Secure, HttpOnly and SameSite.
 - A synthetic-origin CORS check for reflected credentialed origins.
 - Same-host redirect tracking, with a limited GET fallback when a server rejects HEAD.
 - Explicit HTTP support for user-initiated audits. HTTP requests are unauthenticated and unencrypted; the UI warns users not to supply credentials or sensitive URL parameters.
 - Checks for `/.well-known/security.txt`, `/robots.txt`, `/openapi.json` and `/.git/HEAD`. Only the Git metadata check reads a tiny, bounded response sample to confirm a Git reference.
-- Findings include severity, evidence and remediation guidance.
+- Findings include a stable ID, category, severity, confidence estimate, endpoint, evidence and remediation guidance. Credentialed CORS reflection is reported as medium severity because a synthetic unauthenticated probe does not prove sensitive data exposure.
 
 The Web module checks exposed configuration and public metadata. It is not a web application exploit scanner and does not test authenticated application flows, input validation, authorization or business logic.
 
