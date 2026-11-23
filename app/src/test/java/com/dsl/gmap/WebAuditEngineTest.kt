@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class WebAuditEngineTest {
 
@@ -302,15 +303,21 @@ class WebAuditEngineTest {
     @Test
     fun cancellingAuditCancelsTheActiveHttpCallPromptly() = runBlocking {
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
-            val accepted = CountDownLatch(1)
+            val connected = CountDownLatch(1)
+            val headersRead = CountDownLatch(1)
+            val serverFailure = AtomicReference<Throwable?>()
+            val scanFailure = AtomicReference<Throwable?>()
             val worker = Thread {
-                runCatching {
+                try {
                     server.accept().use { socket ->
+                        connected.countDown()
                         socket.soTimeout = 3000
-                        readRequest(socket.getInputStream())
-                        accepted.countDown()
+                        val request = readRequest(socket.getInputStream())
+                        if (request.isNotBlank()) headersRead.countDown()
                         Thread.sleep(5000)
                     }
+                } catch (failure: Throwable) {
+                    serverFailure.set(failure)
                 }
             }
             worker.start()
@@ -318,23 +325,31 @@ class WebAuditEngineTest {
             val job = async {
                 WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/slow")
             }
-            val acceptStarted = System.nanoTime()
-            val requestAccepted = accepted.await(5, TimeUnit.SECONDS)
-            val acceptElapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - acceptStarted)
-            println("Web audit cancellation test: requestAccepted=$requestAccepted after ${acceptElapsedMs}ms")
-            assertTrue("The server did not receive the in-flight request.", requestAccepted)
+            job.invokeOnCompletion { failure ->
+                if (failure != null) scanFailure.set(failure)
+            }
+
+            val connectionAccepted = connected.await(5, TimeUnit.SECONDS)
+            val requestHeadersReceived = connectionAccepted &&
+                headersRead.await(3, TimeUnit.SECONDS)
+            if (!requestHeadersReceived) {
+                val diagnostic = "Connection accepted=$connectionAccepted; " +
+                    "serverFailure=${serverFailure.get()?.javaClass?.simpleName}: ${serverFailure.get()?.message}; " +
+                    "scanFailure=${scanFailure.get()?.javaClass?.simpleName}: ${scanFailure.get()?.message}; " +
+                    "scanCompleted=${job.isCompleted}"
+                job.cancelAndJoin()
+                assertTrue("The server did not receive a complete HTTP request. $diagnostic", requestHeadersReceived)
+            }
 
             val started = System.nanoTime()
             job.cancelAndJoin()
             val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
-            println("Web audit cancellation test: coroutine cancelled after ${elapsedMs}ms")
 
             assertTrue("Cancellation took ${elapsedMs}ms", elapsedMs < 3500)
             worker.interrupt()
             worker.join(1000)
         }
     }
-
 
     @Test
     fun doesNotApplyHtmlDocumentHeaderChecksToJsonApis() = runBlocking {
