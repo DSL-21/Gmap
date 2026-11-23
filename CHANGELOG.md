@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.9.0 — 2026-11-23
+
+### Predictable TCP target selection and exact scan accounting
+- Changed hostname scans to select one deterministic IPv4-preferred DNS address by default instead of silently scanning every A/AAAA answer.
+- Added an explicit "Scan all resolved DNS addresses" option for users who intentionally want to assess every returned endpoint.
+- Kept the requested start/end port range unchanged for every selected address and changed progress wording to count host/port checks accurately.
+- Added a hard ceiling of 262,144 aggregate host/port checks to prevent unexpectedly large DNS expansion and excessive in-memory result allocation.
+- Added deterministic address-selection regression tests for default single-address and opt-in multi-address behavior.
+
+### Memory-only settings
+- Removed SharedPreferences persistence for TCP scan profiles and custom tuning; settings now remain in memory only.
+- Delete legacy TCP scan preferences created by Gmap 2.8.0 and earlier on application startup.
+
+### Validation
+- CI runs Android Lint, unit tests and debug APK assembly. Physical-device validation is still required for DNS rotation, IPv4/IPv6 selection and mobile-network behavior.
+
+## 2.8.0 — 2026-11-19
+
 ## 2.8.0 — 2026-11-19
 
 ### Adaptive TCP scan engine

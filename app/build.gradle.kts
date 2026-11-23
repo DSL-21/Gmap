@@ -13,8 +13,8 @@ android {
         minSdk = 26
         // Android 17 local-network access is requested at runtime for LAN scans.
         targetSdk = 37
-        versionCode = 12
-        versionName = "2.8.0"
+        versionCode = 13
+        versionName = "2.9.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

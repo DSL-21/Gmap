@@ -320,6 +320,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
     var target by remember { mutableStateOf("") }
     var startPort by remember { mutableStateOf("1") }
     var endPort by remember { mutableStateOf("1024") }
+    var scanAllResolvedAddresses by remember { mutableStateOf(false) }
     var permissionError by remember { mutableStateOf<String?>(null) }
     val requestLocalNetworkPermission = rememberLocalNetworkPermissionGate()
 
@@ -371,6 +372,22 @@ fun ScanScreen(viewModel: ScanViewModel) {
             )
         }
 
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Scan all resolved DNS addresses", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Off by default: one deterministic IP is scanned. Turn on to scan every DNS answer; total checks multiply by the number of IPs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = scanAllResolvedAddresses,
+                onCheckedChange = { scanAllResolvedAddresses = it },
+                enabled = !state.isScanning
+            )
+        }
+
         Text("QUICK PORT PROFILES", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { startPort = "1"; endPort = "256" }, modifier = Modifier.weight(1f), enabled = !state.isScanning) {
@@ -408,7 +425,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
         } else {
             Button(
                 onClick = {
-                    val start = { viewModel.startScan(target, startPort, endPort) }
+                    val start = { viewModel.startScan(target, startPort, endPort, scanAllResolvedAddresses) }
                     if (LocalNetworkAccess.targetRequiresPermission(target)) {
                         requestLocalNetworkPermission(
                             { permissionError = null; start() },
@@ -437,7 +454,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
                     Text(state.statusMessage, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     state.resolvedAddress?.let {
                         Text(
-                            "Resolved address: $it",
+                            "Scanning IP address(es): $it",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -446,7 +463,7 @@ fun ScanScreen(viewModel: ScanViewModel) {
                         LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
                     }
                     Text(
-                        "${state.completed} / ${state.total} ports checked",
+                        "${state.completed} / ${state.total} host/port checks completed",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall
                     )

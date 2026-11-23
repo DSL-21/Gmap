@@ -1,4 +1,4 @@
-# Gmap scanner architecture — 2.8.0
+# Gmap scanner architecture — 2.9.0
 
 ## Product and trust boundary
 
@@ -24,7 +24,7 @@ The TCP engine uses non-blocking Java NIO SocketChannel and Selector rather than
 - Maximum: up to 128 concurrent probes with a bounded retry budget and adaptive control.
 - Custom: user-selected concurrency, timeout, retry count and adaptive control.
 
-The selected configuration is persisted locally using Android SharedPreferences and is snapshotted when a scan starts. Changing Settings does not mutate a running scan.
+The selected configuration is held in ViewModel memory and is snapshotted when a scan starts. It is not persisted across process restarts. Legacy TCP scan preferences from previous versions are deleted at startup.
 
 Unanswered probes are retried only within the configured retry budget. A TCP refusal is a positive response and remains CLOSED; it is not retried. A port that still does not respond after retries remains FILTERED / NO RESPONSE, never CLOSED. Retry scheduling is fair: a retry cannot indefinitely starve the first attempt for other requested ports. The scan returns exactly one final result per requested port.
 
@@ -35,7 +35,7 @@ Adaptive concurrency evaluates batches of probe outcomes instead of cutting the 
 - No response after the configured retries: FILTERED.
 - Local permission, routing or I/O failure: ERROR.
 
-A hostname is resolved with `InetAddress.getAllByName()` and every returned IPv4/IPv6 address is scanned independently across the requested range. Results retain the address that produced them. This is TCP Connect, not raw-packet SYN scanning; ordinary non-root Android networking restrictions still apply.
+A hostname is resolved once with `InetAddress.getAllByName()`. By default, Gmap selects one deterministic address (IPv4 preferred, then address order) so a normal 1–1024 scan means exactly 1,024 checks against one IP. The UI exposes an explicit option to scan every resolved IPv4/IPv6 answer. Each selected address receives only the requested start/end port range, and aggregate work is capped at 262,144 host/port checks. Results retain the address that produced them. This is TCP Connect, not raw-packet SYN scanning; ordinary non-root Android networking restrictions still apply.
 
 ## Service identification
 

@@ -1,4 +1,4 @@
-# Gmap 2.5.0 — Rootless Android Network Scanner
+# Gmap 2.9.0 — Rootless Android Network Scanner
 
 Gmap is a native Android network scanner and security-audit toolkit built with Kotlin, Jetpack Compose and standard Android networking APIs. It runs without root or a companion computer.
 
@@ -10,7 +10,7 @@ The Web audit supports explicitly entered HTTP URLs for compatibility testing. H
 
 ## Modules
 
-Gmap 2.5.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.9.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 ### Network discovery
 
@@ -26,6 +26,9 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 ### TCP host scanner
 
 - One hostname, IPv4 address or IPv6 address per scan.
+- For hostnames, one deterministic IPv4-preferred DNS answer is scanned by default; scanning all resolved IPv4/IPv6 answers is an explicit switch.
+- Every selected address is tested only across the exact user-entered port range; aggregate progress counts host/port checks.
+- Aggregate scans are bounded to 262,144 host/port checks to prevent unexpectedly large DNS expansions.
 - Custom port ranges from 1 to 65535.
 - Quick (1–256), Well-known (1–1024), Extended (1–10000) and Full TCP (1–65535) presets.
 - Non-blocking TCP Connect engine built with Java NIO `SocketChannel` and `Selector`.
@@ -69,7 +72,7 @@ Online intelligence can be disabled independently for TCP and Web audits in Sett
 
 ### Privacy and history
 
-TCP, UDP and Web results are held in application memory. Recent results are not exported, copied to the clipboard or written to a database, files, preferences or a cloud service. No analytics or cloud sync are used.
+TCP, UDP and Web results and scan tuning settings are held in application memory. Recent results are not exported, copied to the clipboard or written to a database, files, preferences or a cloud service. Scan profiles return to their defaults after the app process restarts. Legacy TCP scan preferences from versions <= 2.8.0 are deleted on startup. No analytics or cloud sync are used.
 
 ## Android compatibility and network permissions
 

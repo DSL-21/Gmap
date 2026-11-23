@@ -1,7 +1,6 @@
 package com.dsl.gmap.scanner.viewmodel
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.TcpConnectScanner
@@ -14,6 +13,7 @@ import com.dsl.gmap.scanner.model.TcpScanSettings
 import com.dsl.gmap.scanner.model.ScanUiState
 import com.dsl.gmap.scanner.model.VulnerabilityAssessment
 import com.dsl.gmap.scanner.validation.PortRangeParser
+import com.dsl.gmap.scanner.validation.TargetAddressSelector
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,8 +33,10 @@ class ScanViewModel @JvmOverloads constructor(
     private val vulnerabilityEngine: VulnerabilityIntelligenceEngine = VulnerabilityIntelligenceEngine()
 ) : AndroidViewModel(application) {
 
-    private val settingsPreferences = application.getSharedPreferences(SCAN_SETTINGS_PREFS, Context.MODE_PRIVATE)
-
+    init {
+        // Remove legacy persisted scan settings from versions <= 2.8.0.
+        application.deleteSharedPreferences(SCAN_SETTINGS_PREFS)
+    }
 
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
@@ -42,7 +44,7 @@ class ScanViewModel @JvmOverloads constructor(
     private val _history = MutableStateFlow<List<ScanSessionSummary>>(emptyList())
     val history: StateFlow<List<ScanSessionSummary>> = _history.asStateFlow()
 
-    private val _scanSettings = MutableStateFlow(loadScanSettings())
+    private val _scanSettings = MutableStateFlow(TcpScanSettings.preset(TcpScanMode.BALANCED))
     val scanSettings: StateFlow<TcpScanSettings> = _scanSettings.asStateFlow()
 
     private val _onlineIntelligenceEnabled = MutableStateFlow(true)
@@ -90,27 +92,9 @@ class ScanViewModel @JvmOverloads constructor(
     private fun updateScanSettings(settings: TcpScanSettings) {
         val normalized = settings.normalized()
         _scanSettings.value = normalized
-        settingsPreferences.edit()
-            .putString(KEY_SCAN_MODE, normalized.mode.name)
-            .putInt(KEY_MAX_CONCURRENCY, normalized.maxConcurrentProbes)
-            .putInt(KEY_SCAN_TIMEOUT, normalized.timeoutMs)
-            .putInt(KEY_SCAN_RETRIES, normalized.maxRetries)
-            .putBoolean(KEY_ADAPTIVE_CONCURRENCY, normalized.adaptiveConcurrency)
-            .apply()
+
     }
 
-    private fun loadScanSettings(): TcpScanSettings {
-        val mode = runCatching {
-            TcpScanMode.valueOf(settingsPreferences.getString(KEY_SCAN_MODE, null) ?: TcpScanMode.BALANCED.name)
-        }.getOrDefault(TcpScanMode.BALANCED)
-        val preset = TcpScanSettings.preset(mode)
-        return preset.copy(
-            maxConcurrentProbes = settingsPreferences.getInt(KEY_MAX_CONCURRENCY, preset.maxConcurrentProbes),
-            timeoutMs = settingsPreferences.getInt(KEY_SCAN_TIMEOUT, preset.timeoutMs),
-            maxRetries = settingsPreferences.getInt(KEY_SCAN_RETRIES, preset.maxRetries),
-            adaptiveConcurrency = settingsPreferences.getBoolean(KEY_ADAPTIVE_CONCURRENCY, preset.adaptiveConcurrency)
-        ).normalized()
-    }
 
     fun setOnlineIntelligenceEnabled(value: Boolean) {
         _onlineIntelligenceEnabled.value = value
@@ -123,7 +107,8 @@ class ScanViewModel @JvmOverloads constructor(
     fun startScan(
         targetInput: String,
         startPortInput: String,
-        endPortInput: String
+        endPortInput: String,
+        scanAllResolvedAddresses: Boolean = false
     ) {
         if (scanJob?.isActive == true) return
 
@@ -149,29 +134,35 @@ class ScanViewModel @JvmOverloads constructor(
             )
 
             try {
-                // A hostname can resolve to several A/AAAA records (for example,
-                // CDN edges). Scan every returned address instead of silently choosing
-                // only the first one returned by getByName().
+                // Resolve all DNS answers once, then scan one deterministic address
+                // by default. Scanning every answer is an explicit user choice.
                 val addresses = withContext(Dispatchers.IO) {
-                    InetAddress.getAllByName(target).distinctBy { it.hostAddress }
+                    InetAddress.getAllByName(target).distinctBy { it.hostAddress }.toList()
                 }
                 require(addresses.isNotEmpty()) { "The target did not resolve to an IP address." }
 
-                val totalPorts = portRange.size * addresses.size
-                val allResults = ArrayList<com.dsl.gmap.scanner.model.PortScanResult>(totalPorts)
+                val addressesToScan = TargetAddressSelector.select(addresses, scanAllResolvedAddresses)
+                val skippedAddressCount = addresses.size - addressesToScan.size
+                val resolvedAddresses = addressesToScan.mapNotNull { it.hostAddress }
+                val totalChecks = portRange.size * addressesToScan.size
+                require(totalChecks <= MAX_TOTAL_SCAN_CHECKS) {
+                    "This scan would require " + totalChecks + " host/port checks. Reduce the port range or scan fewer DNS addresses (limit: " + MAX_TOTAL_SCAN_CHECKS + ")."
+                }
+                val allResults = ArrayList<com.dsl.gmap.scanner.model.PortScanResult>(totalChecks)
                 val identifiedPorts = ArrayList<com.dsl.gmap.scanner.model.PortScanResult>()
-                val resolvedAddresses = addresses.mapNotNull { it.hostAddress }
                 val scanStartedNanos = System.nanoTime()
+                val resolutionSummary = resolvedAddresses.joinToString(", ") +
+                    if (skippedAddressCount > 0) " (" + skippedAddressCount + " other DNS address(es) not scanned)" else ""
 
                 _uiState.update {
                     it.copy(
-                        resolvedAddress = resolvedAddresses.joinToString(", "),
-                        statusMessage = "Scanning ${addresses.size} resolved address(es)",
-                        total = totalPorts
+                        resolvedAddress = resolutionSummary,
+                        statusMessage = "Scanning " + addressesToScan.size + " of " + addresses.size + " resolved address(es)",
+                        total = totalChecks
                     )
                 }
 
-                addresses.forEachIndexed { addressIndex, address ->
+                addressesToScan.forEachIndexed { addressIndex, address ->
                     val addressLabel = address.hostAddress ?: address.hostName
                     val completedBefore = allResults.size
                     val previousOpen = allResults.count { it.state == PortState.OPEN }
@@ -203,8 +194,8 @@ class ScanViewModel @JvmOverloads constructor(
                             val elapsedNanos = (System.nanoTime() - scanStartedNanos).coerceAtLeast(1L)
                             current.copy(
                                 completed = completed,
-                                total = totalPorts,
-                                progress = completed.toFloat() / totalPorts.toFloat(),
+                                total = totalChecks,
+                                progress = completed.toFloat() / totalChecks.toFloat(),
                                 openCount = previousOpen + progress.openCount,
                                 closedCount = previousClosed + progress.closedCount,
                                 filteredCount = previousFiltered + progress.filteredCount,
@@ -342,11 +333,7 @@ class ScanViewModel @JvmOverloads constructor(
 
     companion object {
         private const val SCAN_SETTINGS_PREFS = "gmap_tcp_scan_settings"
-        private const val KEY_SCAN_MODE = "mode"
-        private const val KEY_MAX_CONCURRENCY = "max_concurrency"
-        private const val KEY_SCAN_TIMEOUT = "timeout_ms"
-        private const val KEY_SCAN_RETRIES = "max_retries"
-        private const val KEY_ADAPTIVE_CONCURRENCY = "adaptive_concurrency"
+        const val MAX_TOTAL_SCAN_CHECKS = 262_144
         const val MAX_HISTORY_ITEMS = 20
     }
 }
