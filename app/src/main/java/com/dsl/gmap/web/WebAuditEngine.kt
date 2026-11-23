@@ -80,7 +80,7 @@ fun interface WebHostResolver {
 }
 
 class WebAuditEngine(
-    private val hostResolver: WebHostResolver = WebHostResolver { Dns.SYSTEM.lookup(it) }
+    private val hostResolver: WebHostResolver = WebHostResolver { host -> InetAddress.getAllByName(host).toList() }
 ) {
     suspend fun scan(input: String): WebAuditResult = withContext(Dispatchers.IO) {
         withTimeout(MAX_SCAN_DURATION_MS) {
