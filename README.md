@@ -1,4 +1,4 @@
-# Gmap 2.9.0 — Rootless Android Network Scanner
+# Gmap 2.10.0 — Rootless Android Network Scanner
 
 Gmap is a native Android network scanner and security-audit toolkit built with Kotlin, Jetpack Compose and standard Android networking APIs. It runs without root or a companion computer.
 
@@ -10,7 +10,7 @@ The Web audit supports explicitly entered HTTP URLs for compatibility testing. H
 
 ## Modules
 
-Gmap 2.9.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
+Gmap 2.10.0 keeps the primary interface focused on four destinations: Network, Scan, Web and Results. Settings are available from the top app bar.
 
 ### Network discovery
 
@@ -41,11 +41,16 @@ Local discovery uses ordinary TCP connections, not ARP. A device that does not a
 
 ### UDP probe scanner
 
-- Custom UDP ranges up to 512 ports per run.
-- DNS, NTP, SSDP and mDNS protocol-aware probes; other ports receive a zero-length UDP datagram.
-- A received response is `OPEN`.
-- An ICMP port-unreachable surfaced by Android is `CLOSED`.
-- A silent probe is `OPEN|FILTERED`; silence is not reported as confirmed closed.
+- Custom UDP ranges up to 4,096 ports per selected target address.
+- Non-blocking Java NIO `DatagramChannel` and `Selector` engine with a bounded adaptive window of up to 64 in-flight probes; no coroutine or thread is created per port.
+- Fair retries for silent probes (0–3 retries), with timeout and concurrency controls; each requested port receives one final result.
+- DNS A-query and NTP client probes validate transaction IDs and protocol response fields before marking the service as confirmed.
+- Unknown UDP ports receive a single-byte 0x00 probe. A response confirms a responsive UDP endpoint, not the identity of its application protocol.
+- DHCP, TFTP, SNMP and IKE are explicitly shown as `NOT_TESTED` by a generic unicast sweep because they require broadcast semantics, a file request or protocol/security configuration.
+- SSDP and mDNS are handled by a separate IPv4 local multicast discovery action using M-SEARCH and a DNS-SD PTR query.
+- States: `OPEN`, `CLOSED`, `OPEN|FILTERED`, `ERROR` and `NOT_TESTED`. Silence never becomes a false `CLOSED`.
+- The selector loop checks cancellation between short waits and closes in-flight channels; responses retain a bounded 16-byte hexadecimal preview in memory.
+- Hostnames use the same deterministic IPv4-preferred single-address default as TCP, with an explicit all-DNS-address option and a cap of 16,384 aggregate host/port checks.
 - Results and history are held in RAM.
 
 ### Web audit
@@ -81,11 +86,11 @@ TCP, UDP and Web results and scan tuning settings are held in application memory
 - Target SDK: 37 (Android 17).
 - Cleartext HTTP is permitted because the Web module audits user-selected HTTP endpoints; it sends only unauthenticated, read-only requests. Prefer HTTPS whenever available.
 - Android 17 local-network access is requested at runtime when a LAN operation is started for a local address or local hostname. Public internet targets do not trigger that permission prompt.
-- Local subnet discovery requires local-network access.
+- Local subnet and multicast discovery require local-network access. Wi-Fi multicast reception also uses Android's multicast lock while discovery is active.
 
 ## Technical limits
 
-Gmap uses standard Android networking APIs. It does not claim raw TCP SYN scanning, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode or packet injection. Local discovery uses TCP presence probes.
+Gmap uses standard Android networking APIs. It does not claim raw TCP SYN scanning, raw ICMP packet crafting, ARP packet scanning, Wi-Fi monitor mode or packet injection. Local discovery uses TCP presence probes. SSDP/mDNS discovery is IPv4 multicast on the active interface; it does not provide a complete IPv6 multicast inventory or capture arbitrary ICMP.
 
 UDP silence is inherently inconclusive. Some UDP services do not respond to an unauthenticated request, and firewalls may suppress ICMP errors.
 

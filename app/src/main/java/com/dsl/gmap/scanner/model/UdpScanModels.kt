@@ -4,7 +4,33 @@ enum class UdpPortState {
     OPEN,
     CLOSED,
     OPEN_FILTERED,
-    ERROR
+    ERROR,
+    NOT_TESTED
+}
+
+data class UdpScanSettings(
+    val timeoutMs: Int = 1000,
+    val maxRetries: Int = 1,
+    val maxConcurrentProbes: Int = 24,
+    val adaptiveConcurrency: Boolean = true
+) {
+    val minConcurrency: Int
+        get() = minOf(maxConcurrentProbes, maxOf(MIN_CONCURRENCY, maxConcurrentProbes / 4))
+
+    fun normalized(): UdpScanSettings = copy(
+        timeoutMs = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
+        maxRetries = maxRetries.coerceIn(MIN_RETRIES, MAX_RETRIES),
+        maxConcurrentProbes = maxConcurrentProbes.coerceIn(MIN_CONCURRENCY, MAX_CONCURRENCY)
+    )
+
+    companion object {
+        const val MIN_TIMEOUT_MS = 100
+        const val MAX_TIMEOUT_MS = 5000
+        const val MIN_RETRIES = 0
+        const val MAX_RETRIES = 3
+        const val MIN_CONCURRENCY = 4
+        const val MAX_CONCURRENCY = 64
+    }
 }
 
 data class UdpPortScanResult(
@@ -13,7 +39,25 @@ data class UdpPortScanResult(
     val latencyMs: Long? = null,
     val responseBytes: Int = 0,
     val serviceHint: String? = null,
-    val detail: String? = null
+    val detail: String? = null,
+    val targetAddress: String? = null,
+    val probeName: String? = null,
+    val serviceConfirmed: Boolean = false,
+    val attempts: Int = 0,
+    val responsePreview: String? = null
+)
+
+data class UdpScanProgress(
+    val completed: Int,
+    val total: Int,
+    val openCount: Int,
+    val closedCount: Int,
+    val openFilteredCount: Int,
+    val errorCount: Int,
+    val notTestedCount: Int,
+    val attemptsSent: Int,
+    val elapsedMs: Long,
+    val probesPerSecond: Double
 )
 
 data class UdpScanUiState(
@@ -29,6 +73,8 @@ data class UdpScanUiState(
     val closedCount: Int = 0,
     val openFilteredCount: Int = 0,
     val errorCount: Int = 0,
+    val notTestedCount: Int = 0,
+    val attemptsSent: Int = 0,
     val results: List<UdpPortScanResult> = emptyList(),
     val elapsedMs: Long? = null
 )
@@ -43,6 +89,8 @@ data class UdpScanSessionSummary(
     val closedCount: Int,
     val openFilteredCount: Int,
     val errorCount: Int,
+    val notTestedCount: Int,
+    val attemptsSent: Int,
     val elapsedMs: Long,
     val finishedAtEpochMs: Long,
     val results: List<UdpPortScanResult>

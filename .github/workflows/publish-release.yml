@@ -1,4 +1,4 @@
-name: Publish Gmap 2.9.0 Release
+name: Publish Gmap 2.10.0 Release
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-gmap-2-9-0
+  group: publish-gmap-2-10-0
   cancel-in-progress: false
 
 jobs:
   publish-release:
-    name: Build, test and publish Gmap 2.9.0
-    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.9.0')
+    name: Build, test and publish Gmap 2.10.0
+    if: startsWith(github.event.head_commit.message, 'Release Gmap v2.10.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release source
@@ -50,24 +50,25 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.9.0.apk
-          (cd release-assets && sha256sum gmap-2.9.0.apk > gmap-2.9.0.apk.sha256)
+          cp app/build/outputs/apk/debug/app-debug.apk release-assets/gmap-2.10.0.apk
+          (cd release-assets && sha256sum gmap-2.10.0.apk > gmap-2.10.0.apk.sha256)
           cat > release-assets/release-notes.md <<'EOF'
-          ## Gmap 2.9.0 — predictable DNS scanning and exact port ranges
+          ## Gmap 2.10.0 — professional rootless UDP engine
 
-          ### TCP target selection and port range handling
-          - Hostnames resolve to all available DNS answers, but Gmap scans one deterministic IPv4-preferred address by default.
-          - Added an explicit option to scan every returned DNS address.
-          - The TCP engine receives the exact requested start/end port range for each selected address.
-          - Progress counts host/port checks and the aggregate scan is capped at 262,144 checks.
-          - Added regression tests for deterministic single-address selection and opt-in multi-address scanning.
+          ### UDP engine and protocol coverage
+          - Rebuilt UDP scanning with non-blocking DatagramChannel and Selector; no coroutine is created per port.
+          - Added bounded adaptive concurrency (up to 64 probes), fair retry scheduling, configurable timeouts and 0–3 retries.
+          - Added prompt cancellation checks and deterministic cleanup of in-flight datagram channels.
+          - Increased the per-address range ceiling to 4,096 and capped aggregate DNS host/port checks at 16,384.
+          - Added DNS transaction validation and NTP server-response validation.
+          - Added NOT_TESTED classification for protocols requiring credentials, file requests, broadcast or multicast semantics.
+          - Added separate local IPv4 multicast discovery for SSDP M-SEARCH and mDNS DNS-SD.
+          - Added full result-state visibility, attempt counts, service-confirmation evidence and bounded response previews.
+          - Aligned UDP DNS target selection with TCP: one deterministic IP by default and an optional scan-all-addresses switch.
 
-          ### Privacy and settings
-          - Removed persistent TCP scan settings; scan tuning remains in memory and resets after process restart.
-          - Removed legacy TCP scan preferences from previous app versions.
-          - Retained bounded retries, adaptive concurrency, per-address result attribution and service fingerprinting.
-
-          ### Documentation
+          ### Privacy, safety and documentation
+          - Kept scan settings, histories and response previews in RAM.
+          - No SNMP default community or guessed TFTP filename is sent.
           - Updated README, architecture notes and changelog.
 
           ### Validation and limitations
@@ -79,12 +80,12 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v2.9.0
+          RELEASE_TAG: v2.10.0
         run: |
           gh release create "$RELEASE_TAG" \
-            release-assets/gmap-2.9.0.apk \
-            release-assets/gmap-2.9.0.apk.sha256 \
+            release-assets/gmap-2.10.0.apk \
+            release-assets/gmap-2.10.0.apk.sha256 \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Gmap 2.9.0 — predictable DNS scan scope" \
+            --title "Gmap 2.10.0 — professional rootless UDP engine" \
             --notes-file release-assets/release-notes.md

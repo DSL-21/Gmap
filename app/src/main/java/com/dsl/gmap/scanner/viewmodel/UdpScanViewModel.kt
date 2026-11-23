@@ -3,10 +3,13 @@ package com.dsl.gmap.scanner.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dsl.gmap.scanner.engine.UdpProbeScanner
+import com.dsl.gmap.scanner.model.UdpPortScanResult
 import com.dsl.gmap.scanner.model.UdpPortState
 import com.dsl.gmap.scanner.model.UdpScanSessionSummary
+import com.dsl.gmap.scanner.model.UdpScanSettings
 import com.dsl.gmap.scanner.model.UdpScanUiState
 import com.dsl.gmap.scanner.validation.PortRangeParser
+import com.dsl.gmap.scanner.validation.TargetAddressSelector
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,7 +32,13 @@ class UdpScanViewModel(
 
     private var scanJob: Job? = null
 
-    fun startScan(targetInput: String, startPortInput: String, endPortInput: String) {
+    fun startScan(
+        targetInput: String,
+        startPortInput: String,
+        endPortInput: String,
+        scanAllResolvedAddresses: Boolean = false,
+        settings: UdpScanSettings = UdpScanSettings()
+    ) {
         if (scanJob?.isActive == true) return
 
         val target = targetInput.trim()
@@ -39,15 +48,13 @@ class UdpScanViewModel(
         }
 
         val range = PortRangeParser.parse(startPortInput, endPortInput)
-        if (range == null) {
-            setError("Enter a valid UDP port range between 1 and 65535.")
-            return
-        }
-        if (range.size > UdpProbeScanner.MAX_PORTS_PER_SCAN) {
-            setError("UDP scans are limited to ${UdpProbeScanner.MAX_PORTS_PER_SCAN} ports per run.")
+        if (range == null || range.size > UdpProbeScanner.MAX_PORTS_PER_SCAN) {
+            setError("Enter a valid UDP port range. Each target address is limited to " +
+                UdpProbeScanner.MAX_PORTS_PER_SCAN + " ports.")
             return
         }
 
+        val scanSettings = settings.normalized()
         scanJob = viewModelScope.launch {
             val startedAt = System.currentTimeMillis()
             _uiState.value = UdpScanUiState(
@@ -55,84 +62,134 @@ class UdpScanViewModel(
                 target = target,
                 statusMessage = "Resolving target..."
             )
+
             try {
-                val address = withContext(Dispatchers.IO) { InetAddress.getByName(target) }
+                val resolved = withContext(Dispatchers.IO) {
+                    InetAddress.getAllByName(target).distinctBy { it.hostAddress }.toList()
+                }
+                val addresses = TargetAddressSelector.select(resolved, scanAllResolvedAddresses)
+                val totalChecks = range.size * addresses.size
+                require(totalChecks <= MAX_TOTAL_SCAN_CHECKS) {
+                    "This UDP scan would require " + totalChecks +
+                        " host/port checks. Scan fewer DNS addresses or reduce the port range (limit: " +
+                        MAX_TOTAL_SCAN_CHECKS + ")."
+                }
+
+                val resolvedLabels = addresses.mapNotNull { it.hostAddress }
+                val skippedAddresses = resolved.size - addresses.size
+                val resolutionSummary = resolvedLabels.joinToString(", ") +
+                    if (skippedAddresses > 0) " (" + skippedAddresses + " other DNS address(es) not scanned)" else ""
+
+                val allResults = ArrayList<UdpPortScanResult>(totalChecks)
                 _uiState.update {
                     it.copy(
-                        resolvedAddress = address.hostAddress,
-                        total = range.size,
-                        statusMessage = "Probing UDP services on ${address.hostAddress}"
+                        resolvedAddress = resolutionSummary,
+                        total = totalChecks,
+                        statusMessage = "Scanning " + addresses.size + " resolved address(es)"
                     )
                 }
 
-                val results = scanner.scan(
-                    address = address,
-                    startPort = range.start,
-                    endPort = range.end
-                ) { completed, total, latest ->
-                    _uiState.update { current ->
-                        val stored = if (latest.state == UdpPortState.OPEN) {
-                            (current.results.filterNot { it.port == latest.port } + latest).sortedBy { it.port }
-                        } else {
-                            current.results.filterNot { it.port == latest.port }
-                        }
-                        current.copy(
-                            completed = completed,
-                            total = total,
-                            progress = completed.toFloat() / total.coerceAtLeast(1),
-                            openCount = resultsCountAfter(current, latest, UdpPortState.OPEN),
-                            closedCount = resultsCountAfter(current, latest, UdpPortState.CLOSED),
-                            openFilteredCount = resultsCountAfter(current, latest, UdpPortState.OPEN_FILTERED),
-                            errorCount = resultsCountAfter(current, latest, UdpPortState.ERROR),
-                            results = stored
-                        )
+                addresses.forEachIndexed { addressIndex, address ->
+                    val addressLabel = address.hostAddress ?: address.hostName
+                    val completedBefore = allResults.size
+                    val priorOpen = allResults.count { it.state == UdpPortState.OPEN }
+                    val priorClosed = allResults.count { it.state == UdpPortState.CLOSED }
+                    val priorFiltered = allResults.count { it.state == UdpPortState.OPEN_FILTERED }
+                    val priorErrors = allResults.count { it.state == UdpPortState.ERROR }
+                    val priorNotTested = allResults.count { it.state == UdpPortState.NOT_TESTED }
+                    val attemptsBefore = allResults.sumOf { it.attempts }
+
+                    _uiState.update {
+                        it.copy(statusMessage = "Scanning " + addressLabel + " (" +
+                            (addressIndex + 1) + "/" + addresses.size + ")")
                     }
+
+                    val addressResults = scanner.scan(
+                        address = address,
+                        startPort = range.start,
+                        endPort = range.end,
+                        settings = scanSettings
+                    ) { progress, latest ->
+                        val tagged = latest.copy(targetAddress = addressLabel)
+                        _uiState.update { current ->
+                            val openRows = if (tagged.state == UdpPortState.OPEN) {
+                                (current.results + tagged)
+                                    .distinctBy { result -> (result.targetAddress ?: "") + ":" + result.port }
+                                    .sortedWith(compareBy({ it.targetAddress }, { it.port }))
+                            } else {
+                                current.results
+                            }
+                            current.copy(
+                                completed = completedBefore + progress.completed,
+                                total = totalChecks,
+                                progress = (completedBefore + progress.completed).toFloat() / totalChecks.toFloat(),
+                                openCount = priorOpen + progress.openCount,
+                                closedCount = priorClosed + progress.closedCount,
+                                openFilteredCount = priorFiltered + progress.openFilteredCount,
+                                errorCount = priorErrors + progress.errorCount,
+                                notTestedCount = priorNotTested + progress.notTestedCount,
+                                attemptsSent = attemptsBefore + progress.attemptsSent,
+                                results = openRows,
+                                elapsedMs = System.currentTimeMillis() - startedAt,
+                                statusMessage = "Scanning " + addressLabel + " (" +
+                                    (addressIndex + 1) + "/" + addresses.size + ")"
+                            )
+                        }
+                    }
+
+                    allResults.addAll(addressResults.map { it.copy(targetAddress = addressLabel) })
                 }
 
+                val ordered = allResults.sortedWith(compareBy({ it.targetAddress }, { it.port }))
+                val openCount = ordered.count { it.state == UdpPortState.OPEN }
+                val closedCount = ordered.count { it.state == UdpPortState.CLOSED }
+                val filteredCount = ordered.count { it.state == UdpPortState.OPEN_FILTERED }
+                val errorCount = ordered.count { it.state == UdpPortState.ERROR }
+                val notTestedCount = ordered.count { it.state == UdpPortState.NOT_TESTED }
+                val attemptsSent = ordered.sumOf { it.attempts }
                 val elapsed = System.currentTimeMillis() - startedAt
-                val openCount = results.count { it.state == UdpPortState.OPEN }
-                val closedCount = results.count { it.state == UdpPortState.CLOSED }
-                val openFilteredCount = results.count { it.state == UdpPortState.OPEN_FILTERED }
-                val errorCount = results.count { it.state == UdpPortState.ERROR }
-                val visible = results.filter { it.state == UdpPortState.OPEN }
+                val finishedAt = System.currentTimeMillis()
 
                 _uiState.update {
                     it.copy(
                         isScanning = false,
-                        completed = results.size,
-                        total = results.size,
+                        completed = ordered.size,
+                        total = ordered.size,
                         progress = 1f,
                         openCount = openCount,
                         closedCount = closedCount,
-                        openFilteredCount = openFilteredCount,
+                        openFilteredCount = filteredCount,
                         errorCount = errorCount,
-                        results = visible,
+                        notTestedCount = notTestedCount,
+                        attemptsSent = attemptsSent,
+                        results = ordered,
                         elapsedMs = elapsed,
                         statusMessage = "UDP scan completed"
                     )
                 }
 
-                val finishedAt = System.currentTimeMillis()
                 val summary = UdpScanSessionSummary(
                     id = finishedAt,
                     target = target,
-                    resolvedAddress = address.hostAddress ?: target,
-                    portRange = "${range.start}-${range.end}",
-                    totalPorts = results.size,
+                    resolvedAddress = resolvedLabels.joinToString(", "),
+                    portRange = range.start.toString() + "-" + range.end,
+                    totalPorts = ordered.size,
                     openCount = openCount,
                     closedCount = closedCount,
-                    openFilteredCount = openFilteredCount,
+                    openFilteredCount = filteredCount,
                     errorCount = errorCount,
+                    notTestedCount = notTestedCount,
+                    attemptsSent = attemptsSent,
                     elapsedMs = elapsed,
                     finishedAtEpochMs = finishedAt,
-                    results = visible
+                    results = ordered
                 )
                 _history.update { (listOf(summary) + it).take(MAX_HISTORY_ITEMS) }
             } catch (cancelled: CancellationException) {
                 _uiState.update { it.copy(isScanning = false, statusMessage = "UDP scan cancelled") }
                 throw cancelled
             } catch (exception: Exception) {
-                setError("UDP scan failed: ${exception.message ?: "Unknown error"}")
+                setError("UDP scan failed: " + (exception.message ?: "Unknown error"))
             }
         }
     }
@@ -145,28 +202,14 @@ class UdpScanViewModel(
         _history.value = emptyList()
     }
 
-    private fun resultsCountAfter(
-        current: UdpScanUiState,
-        latest: com.dsl.gmap.scanner.model.UdpPortScanResult,
-        selected: UdpPortState
-    ): Int {
-        val old = current.results.firstOrNull { it.port == latest.port }?.state
-        return current.run {
-            val currentCount = when (selected) {
-                UdpPortState.OPEN -> openCount
-                UdpPortState.CLOSED -> closedCount
-                UdpPortState.OPEN_FILTERED -> openFilteredCount
-                UdpPortState.ERROR -> errorCount
-            }
-            currentCount + (if (latest.state == selected) 1 else 0) - (if (old == selected) 1 else 0)
+    private fun setError(message: String) {
+        _uiState.update {
+            it.copy(isScanning = false, statusMessage = message, errorMessage = message)
         }
     }
 
-    private fun setError(message: String) {
-        _uiState.update { it.copy(isScanning = false, statusMessage = message, errorMessage = message) }
-    }
-
     companion object {
-        const val MAX_HISTORY_ITEMS = 20
+        const val MAX_TOTAL_SCAN_CHECKS = 16_384
+        const val MAX_HISTORY_ITEMS = 10
     }
 }

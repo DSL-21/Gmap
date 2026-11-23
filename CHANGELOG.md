@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.10.0 — 2026-11-23
+
+### Rebuilt rootless UDP engine
+- Replaced one-coroutine/one-blocking-DatagramSocket-per-port probing with a non-blocking DatagramChannel + Selector event loop.
+- Bounded in-flight probes to 64, added a conservative adaptive window, fair retry scheduling and 0–3 retries for unanswered ports.
+- Added cancellation checks between selector waits (maximum 50 ms) and deterministic cleanup of every in-flight channel.
+- Increased the UDP per-address range limit from 512 to 4,096 ports; all selected DNS addresses together are capped at 16,384 host/port checks.
+- Added protocol-aware DNS A and NTP probes with transaction/response validation. A received generic UDP datagram confirms endpoint responsiveness, not the identity of the service.
+- Added explicit NOT_TESTED results for DHCP, TFTP, SNMP, IKE, SSDP and mDNS when a safe/protocol-correct unicast probe is not available. No default SNMP community or guessed TFTP filename is sent.
+- Added separate IPv4 LAN multicast discovery for SSDP M-SEARCH and mDNS DNS-SD PTR responses, with active-interface selection and temporary Android Wi-Fi multicast lock.
+- Displayed every final port state, attempt count, evidence level and a bounded hexadecimal response preview. Results remain in RAM.
+- Unified UDP hostname resolution with TCP: one deterministic IPv4-preferred IP by default, with an explicit all-address option.
+- Added regression tests for DNS/NTP validation, retry-after-timeout, exact result coverage, unsupported probes and prompt cancellation.
+
+### Validation
+- Android Lint, unit tests and debug APK assembly run in GitHub Actions. Physical Android testing is still required for multicast behavior across OEMs, Wi-Fi chipsets, routers and IPv6 networks.
+- Non-root Android still cannot guarantee delivery of every ICMP error or provide raw-packet capture. UDP silence therefore remains OPEN|FILTERED, not proof of an open or closed port.
+
 ## 2.9.0 — 2026-11-23
 
 ### Predictable TCP target selection and exact scan accounting
@@ -15,8 +33,6 @@
 
 ### Validation
 - CI runs Android Lint, unit tests and debug APK assembly. Physical-device validation is still required for DNS rotation, IPv4/IPv6 selection and mobile-network behavior.
-
-## 2.8.0 — 2026-11-19
 
 ## 2.8.0 — 2026-11-19
 

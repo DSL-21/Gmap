@@ -1,4 +1,4 @@
-# Gmap scanner architecture — 2.9.0
+# Gmap scanner architecture — 2.10.0
 
 ## Product and trust boundary
 
@@ -8,7 +8,7 @@ Use Gmap only against devices and networks you own or are explicitly authorized 
 
 ## Permissions and data handling
 
-The manifest requests only INTERNET, ACCESS_NETWORK_STATE and ACCESS_LOCAL_NETWORK. The application component is the launcher activity. Android backup is disabled. Scan inputs and result history remain in ViewModel memory; no scan database, report exports, app-owned output files, clipboard export, analytics or cloud sync are implemented.
+The manifest requests INTERNET, ACCESS_NETWORK_STATE, ACCESS_LOCAL_NETWORK and CHANGE_WIFI_MULTICAST_STATE. The application component is the launcher activity. Android backup is disabled. Scan inputs and result history remain in ViewModel memory; no scan database, report exports, app-owned output files, clipboard export, analytics or cloud sync are implemented.
 
 ## Local network discovery
 
@@ -45,7 +45,15 @@ Port-number service labels are hints only. Product/version identities are genera
 
 ## UDP probing
 
-UDP scanning accepts up to 512 ports per run and runs at most 48 simultaneous probes. It uses read-only DNS, NTP, SSDP and mDNS messages on selected service ports; other ports receive an empty datagram. A response means OPEN, a surfaced ICMP port-unreachable means CLOSED, and silence remains OPEN|FILTERED. UDP silence is not proof that a port is closed.
+The UDP engine uses non-blocking Java NIO DatagramChannel and Selector. A single selector manages a bounded in-flight set (maximum 64) rather than creating a coroutine and blocking DatagramSocket for every port. The default window starts conservatively and is adjusted from batches of timeout outcomes. A fair retry queue retries silent ports 0–3 times without starving first-pass coverage. Cancellation is checked between selector waits capped at 50 ms, and all registered channels are closed in a finally block.
+
+A unicast UDP sweep accepts up to 4,096 ports per target address. Hostname resolution follows the same target-selection policy as TCP: one deterministic IPv4-preferred address by default, or all resolved addresses when explicitly requested. Aggregate work is capped at 16,384 host/port checks.
+
+The probe catalog uses a DNS A query for example.com on UDP/53 and validates the matching transaction ID and DNS response bit. UDP/123 uses an NTPv4 client request and validates the NTP server mode, version and minimum response size. Other unrecognized ports receive a single-byte 0x00 probe; any response proves a responsive UDP endpoint but does not identify its application protocol.
+
+DHCP, TFTP, SNMP, IKE, SSDP and mDNS are marked NOT_TESTED in the unicast sweep when a safe and protocol-correct probe is unavailable. The scanner does not guess TFTP filenames or send default SNMP communities. SSDP and mDNS are available in a separate IPv4 multicast discovery operation: SSDP sends M-SEARCH to 239.255.255.250:1900 and mDNS sends a DNS-SD PTR query to 224.0.0.251:5353. Discovery binds to the active interface and acquires a temporary Wi-Fi multicast lock. The mDNS listener may be unavailable if port 5353 is already occupied; the app reports this as a warning rather than silently claiming discovery succeeded.
+
+Final states are OPEN, CLOSED, OPEN_FILTERED, ERROR and NOT_TESTED. A UDP reply confirms the endpoint is responsive; only protocol validation marks DNS or NTP service as confirmed. ICMP port-unreachable is classified CLOSED only when Android surfaces it to the application. Silence remains OPEN_FILTERED and never becomes proof of an open or closed port. A response preview is limited to 16 bytes and is kept only in memory.
 
 ## Web audit
 
