@@ -2,6 +2,7 @@ package com.dsl.gmap
 
 import com.dsl.gmap.web.FindingSeverity
 import com.dsl.gmap.web.WebAuditEngine
+import com.dsl.gmap.web.WebHostResolver
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
