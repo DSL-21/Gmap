@@ -22,6 +22,13 @@ android {
         compose = true
     }
 
+    // Plain JVM unit tests do not provide Android's Log implementation. OkHttp queries
+    // android.util.Log while initializing its Android platform adapter, so return Android SDK
+    // defaults in local tests; instrumented/device tests still use the real Android runtime.
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
