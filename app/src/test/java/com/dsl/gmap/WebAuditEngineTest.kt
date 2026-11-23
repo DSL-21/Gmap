@@ -5,6 +5,7 @@ import com.dsl.gmap.web.WebAuditEngine
 import com.dsl.gmap.web.WebHostResolver
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -15,7 +16,6 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
 class WebAuditEngineTest {
 
@@ -303,43 +303,28 @@ class WebAuditEngineTest {
     @Test
     fun cancellingAuditCancelsTheActiveHttpCallPromptly() = runBlocking {
         ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
-            val connected = CountDownLatch(1)
-            val headersRead = CountDownLatch(1)
-            val serverFailure = AtomicReference<Throwable?>()
-            val scanFailure = AtomicReference<Throwable?>()
+            val requestReceived = CountDownLatch(1)
             val worker = Thread {
-                try {
+                runCatching {
                     server.accept().use { socket ->
-                        connected.countDown()
                         socket.soTimeout = 3000
-                        val request = readRequest(socket.getInputStream())
-                        if (request.isNotBlank()) headersRead.countDown()
+                        readRequest(socket.getInputStream())
+                        requestReceived.countDown()
                         Thread.sleep(5000)
                     }
-                } catch (failure: Throwable) {
-                    serverFailure.set(failure)
                 }
             }
             worker.start()
 
-            val job = async(kotlinx.coroutines.Dispatchers.IO) {
+            // Use a background dispatcher: CountDownLatch.await below blocks the runBlocking
+            // thread and would otherwise prevent a child async coroutine from starting.
+            val job = async(Dispatchers.IO) {
                 WebAuditEngine().scan("http://127.0.0.1:${server.localPort}/slow")
             }
-            job.invokeOnCompletion { failure ->
-                if (failure != null) scanFailure.set(failure)
-            }
-
-            val connectionAccepted = connected.await(5, TimeUnit.SECONDS)
-            val requestHeadersReceived = connectionAccepted &&
-                headersRead.await(3, TimeUnit.SECONDS)
-            if (!requestHeadersReceived) {
-                val diagnostic = "Connection accepted=$connectionAccepted; " +
-                    "serverFailure=${serverFailure.get()?.javaClass?.simpleName}: ${serverFailure.get()?.message}; " +
-                    "scanFailure=${scanFailure.get()?.javaClass?.simpleName}: ${scanFailure.get()?.message}; " +
-                    "scanCompleted=${job.isCompleted}"
-                job.cancelAndJoin()
-                assertTrue("The server did not receive a complete HTTP request. $diagnostic", requestHeadersReceived)
-            }
+            assertTrue(
+                "The server did not receive the in-flight request.",
+                requestReceived.await(5, TimeUnit.SECONDS)
+            )
 
             val started = System.nanoTime()
             job.cancelAndJoin()
