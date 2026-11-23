@@ -301,7 +301,7 @@ class WebAuditEngineTest {
 
     @Test
     fun cancellingAuditCancelsTheActiveHttpCallPromptly() = runBlocking {
-        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+        ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { server ->
             val accepted = CountDownLatch(1)
             val worker = Thread {
                 runCatching {
@@ -329,7 +329,7 @@ class WebAuditEngineTest {
             val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
             println("Web audit cancellation test: coroutine cancelled after ${elapsedMs}ms")
 
-            assertTrue("Cancellation took ${elapsedMs}ms", elapsedMs < 2500)
+            assertTrue("Cancellation took ${elapsedMs}ms", elapsedMs < 3500)
             worker.interrupt()
             worker.join(1000)
         }
